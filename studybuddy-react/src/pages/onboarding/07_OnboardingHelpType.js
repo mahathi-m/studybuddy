@@ -12,12 +12,17 @@ const helpOptions = [
 ];
 
 function OnboardingHelpType() {
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(() => {
+    const savedHelpType = localStorage.getItem('helpType');
+    return savedHelpType ? JSON.parse(savedHelpType)[0] || '' : '';
+  });
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Help type:', selected);
+    // Save to localStorage as an array (for consistency with other multi-select fields)
+    localStorage.setItem('helpType', JSON.stringify([selected]));
+    console.log('Help type saved:', selected);
     navigate('/onboarding/connection');
   };
 

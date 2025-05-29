@@ -1,7 +1,8 @@
 import React from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, provider } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, provider } from './firebase';
 import './App.css';
 
 import OnboardingName from './pages/onboarding/01_OnboardingName';
@@ -25,7 +26,17 @@ function Home() {
     try {
       const result = await signInWithPopup(auth, provider);
       console.log('Logged in:', result.user);
-      navigate('/onboarding/name');
+      // Check if user has completed onboarding
+      const userRef = doc(db, 'users', result.user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists() && userSnap.data().onboardingComplete) {
+        // User has completed onboarding, go to home
+        navigate('/home');
+      } else {
+        // User needs to complete onboarding
+        navigate('/onboarding/name');
+      }
     } catch (error) {
       console.error('Login failed:', error);
     }

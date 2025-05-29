@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 
 function OnboardingName() {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(localStorage.getItem('name') || '');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Name submitted:', name);
+    // Save name to localStorage
+    localStorage.setItem('name', name);
+    // Navigate to next step
     navigate('/onboarding/gender');
   };
 

@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 
 function OnboardingBio() {
-  const [bio, setBio] = useState('');
+  const [bio, setBio] = useState(localStorage.getItem('bio') || '');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Bio:', bio);
+    // Save bio to localStorage
+    localStorage.setItem('bio', bio);
+    console.log('Bio saved:', bio);
     navigate('/onboarding/houserules');
   };
 

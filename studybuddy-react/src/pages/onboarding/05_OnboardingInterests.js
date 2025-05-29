@@ -13,7 +13,10 @@ const interestOptions = [
 ];
 
 function OnboardingInterests() {
-  const [selected, setSelected] = useState([]);
+  const [selected, setSelected] = useState(() => {
+    const savedInterests = localStorage.getItem('interests');
+    return savedInterests ? JSON.parse(savedInterests) : [];
+  });
   const navigate = useNavigate();
 
   const toggleInterest = (interest) => {
@@ -26,9 +29,10 @@ function OnboardingInterests() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Selected interests:', selected);
+    // Save to localStorage
+    localStorage.setItem('interests', JSON.stringify(selected));
+    console.log('Saved interests:', selected);
     navigate('/onboarding/classes');
-    // Optionally navigate to dashboard/home
   };
 
   const handleBack = () => {

@@ -6,18 +6,27 @@ import cameraIcon from '../../assets/camera.png'; // replace with your actual pa
 
 function OnboardingPhoto() {
   const navigate = useNavigate();
+  const [photoFile, setPhotoFile] = useState(null);
   const [preview, setPreview] = useState(null);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
+      setPhotoFile(file);
       setPreview(URL.createObjectURL(file));
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Profile photo uploaded');
+    
+    if (photoFile) {
+      // We can't store the file in localStorage, but we can store it in sessionStorage temporarily
+      // We'll save the actual file object reference to window for Firebase upload later
+      window.photoFileForUpload = photoFile;
+      localStorage.setItem('photoSelected', 'true');
+    }
+    
     navigate('/onboarding/bio');
   };
 

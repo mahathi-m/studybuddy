@@ -13,6 +13,13 @@ function OnboardingMajorMinor() {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log('Major:', major, '| Minor:', minor);
+    
+    // Save to localStorage
+    localStorage.setItem('major', JSON.stringify(major));
+    if (minor) {
+      localStorage.setItem('minor', JSON.stringify(minor));
+    }
+    
     navigate('/onboarding/interests');
   };
 

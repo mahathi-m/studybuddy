@@ -12,12 +12,17 @@ const workOptions = [
 ];
 
 function OnboardingWorkStyle() {
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(() => {
+    const savedWorkStyle = localStorage.getItem('workStyle');
+    return savedWorkStyle ? JSON.parse(savedWorkStyle)[0] || '' : '';
+  });
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Work environment:', selected);
+    // Save to localStorage as an array (for consistency with other multi-select fields)
+    localStorage.setItem('workStyle', JSON.stringify([selected]));
+    console.log('Work environment saved:', selected);
     navigate('/onboarding/photo');
   };
 

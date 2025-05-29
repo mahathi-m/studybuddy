@@ -11,12 +11,14 @@ const connectionOptions = [
 ];
 
 function OnboardingConnectionType() {
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(localStorage.getItem('connectionType') || '');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Connection type:', selected);
+    // Save to localStorage
+    localStorage.setItem('connectionType', selected);
+    console.log('Connection type saved:', selected);
     navigate('/onboarding/workstyle');
   };
 

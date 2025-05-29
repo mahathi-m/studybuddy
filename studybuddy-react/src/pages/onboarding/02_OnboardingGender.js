@@ -4,13 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 
 function OnboardingGender() {
-  const [gender, setGender] = useState('');
-  const [showGender, setShowGender] = useState(false);
+  const [gender, setGender] = useState(localStorage.getItem('gender') || '');
+  const [showGender, setShowGender] = useState(localStorage.getItem('showGender') === 'true');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Gender:', gender, ' | Show on profile:', showGender);
+    // Save to localStorage
+    localStorage.setItem('gender', gender);
+    localStorage.setItem('showGender', showGender);
+    console.log('Gender saved:', gender, ' | Show on profile:', showGender);
     navigate('/onboarding/gradyear');
   };
 

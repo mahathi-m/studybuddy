@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 
 function OnboardingGradYear() {
-  const [gradYear, setGradYear] = useState('');
+  const [gradYear, setGradYear] = useState(localStorage.getItem('gradYear') || '');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Grad year submitted:', gradYear);
+    // Save to localStorage
+    localStorage.setItem('gradYear', gradYear);
+    console.log('Grad year saved:', gradYear);
     navigate('/onboarding/majorminor');
   };
 

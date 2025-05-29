@@ -6,12 +6,15 @@ import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 
 function OnboardingClasses() {
-  const [classes, setClasses] = useState('');
+  const [classes, setClasses] = useState(localStorage.getItem('classes') || '');
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Classes:', classes);
+    // Process classes into an array and save to localStorage
+    const classesArray = classes.split(',').map(cls => cls.trim()).filter(cls => cls !== '');
+    localStorage.setItem('classes', JSON.stringify(classesArray));
+    console.log('Classes saved:', classesArray);
     navigate('/onboarding/helptype');
   };
 
