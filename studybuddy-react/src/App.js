@@ -22,24 +22,10 @@ import AppHome from './pages/home/AppHome';
 function Home() {
   const navigate = useNavigate();
 
-  const handleGoogleLogin = async () => {
-    try {
-      const result = await signInWithPopup(auth, provider);
-      console.log('Logged in:', result.user);
-      // Check if user has completed onboarding
-      const userRef = doc(db, 'users', result.user.uid);
-      const userSnap = await getDoc(userRef);
-      
-      if (userSnap.exists() && userSnap.data().onboardingComplete) {
-        // User has completed onboarding, go to home
-        navigate('/home');
-      } else {
-        // User needs to complete onboarding
-        navigate('/onboarding/name');
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-    }
+  const handleGoogleLogin = () => {
+    // Skip authentication and directly navigate to home
+    console.log('Navigating to home');
+    navigate('/home');
   };
 
   return (
