@@ -20,6 +20,7 @@ import OnboardingPhoto from './pages/onboarding/10_OnboardingPhoto';
 import OnboardingBio from './pages/onboarding/11_OnboardingBio';
 import OnboardingHouseRules from './pages/onboarding/12_OnboardingHouseRules';
 import AppHome from './pages/home/AppHome';
+import Calendar from './pages/calendar/Calendar';
 
 function Home() {
   const navigate = useNavigate();
@@ -151,6 +152,13 @@ function App() {
         <Route path="/home" element={
           <ProtectedRoute requireAuth={true} requireOnboarding={true}>
             <AppHome />
+          </ProtectedRoute>
+        } />
+        
+        {/* Calendar route - requires auth and completed onboarding */}
+        <Route path="/calendar" element={
+          <ProtectedRoute requireAuth={true} requireOnboarding={true}>
+            <Calendar />
           </ProtectedRoute>
         } />
       </Routes>

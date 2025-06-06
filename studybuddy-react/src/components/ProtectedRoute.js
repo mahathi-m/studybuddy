@@ -27,7 +27,7 @@ const ProtectedRoute = ({
   
   // Check authentication requirement
   if (requireAuth && !currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   // Check onboarding status requirements

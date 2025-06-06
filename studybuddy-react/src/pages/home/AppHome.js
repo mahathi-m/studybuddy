@@ -1,15 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import TinderCard from 'react-tinder-card';
 import '../../styles/AppHome.css';
 
 import logo from '../../assets/logo.png';
 import { db, auth } from '../../firebase';
+import { signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc, orderBy, writeBatch, getDoc } from 'firebase/firestore';
 
 // Import profile migration utilities
 import { migrateProfilesToFirebase, getAllProfilesFromFirebase, checkProfilesMigrated } from '../../utils/profileMigration';
 
-// Master list of profiles
+// Kevin's profile as the current user
+const kevinProfile = {
+  name: 'Kevin',
+  image: require('../../assets/Kevin.jpeg'),
+  majorMinor: 'Human–Computer Interaction',
+  classYear: 'Class of 2025',
+  bio: `Usually camped at Green with headphones on. Open to anything from grind-mode to chatty review!`,
+  classes: 'CS 278, CS 377U, PSYC 135',
+  interests: ['Economics', 'HCI', 'AI / ML', 'Education']
+};
+
+// Master list of profiles (other users)
 const allProfiles = [
   {
     name: 'Nesara',
@@ -19,15 +32,6 @@ const allProfiles = [
     bio: `Freshman struggling to survive O-Chem and CS 106B with Keith. Looking for a committed chemistry (or pre-med?) study-buddy to meet...`,
     classes: 'CS 278, CHEM 33',
     interests: ['Startups / VC', 'Pre-Med', 'French', 'Social Entrepreneurship']
-  },
-  {
-    name: 'Kevin',
-    image: require('../../assets/Kevin.jpeg'),
-    majorMinor: 'Human–Computer Interaction',
-    classYear: 'Class of 2025',
-    bio: `Usually camped at Green with headphones on. Open to anything from grind-mode to chatty review. If we match...`,
-    classes: 'CS 278, CS 377U, PSYC 135',
-    interests: ['Economics', 'HCI', 'AI / ML', 'Education']
   },
   {
     name: 'Luke',
@@ -213,6 +217,19 @@ function shuffle(array) {
 }
 
 function AppHome() {
+  const navigate = useNavigate();
+  
+  // Set Kevin as the current user profile with ability to update
+  const [currentUserProfile, setCurrentUserProfile] = useState(kevinProfile);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Temporary form values during editing
+  const [editFormValues, setEditFormValues] = useState({
+    bio: currentUserProfile.bio,
+    classes: currentUserProfile.classes,
+    interests: currentUserProfile.interests.join(', ')
+  });
+  
   // Use Firebase to get profiles instead of hardcoded ones
   const [profileDeck, setProfileDeck] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1205,19 +1222,138 @@ function AppHome() {
       {/* Calendar tab content */}
       {activeTab === 'calendar' && (
         <div className="calendar-container">
-          <div className="placeholder-content">
-            <h3>Calendar Coming Soon</h3>
-            <p>Your study sessions and meetings will appear here</p>
+          <div className="calendar-link-container">
+            <h3>Study Calendar</h3>
+            <p>Schedule and manage your study sessions</p>
+            <Link to="/calendar" className="calendar-link-button">
+              Open Full Calendar
+            </Link>
           </div>
         </div>
       )}
       
-      {/* Profile tab content */}
+      {/* Profile tab content - Display Kevin's profile */}
       {activeTab === 'profile' && (
         <div className="profile-container">
-          <div className="placeholder-content">
-            <h3>Your Profile</h3>
-            <p>Your profile settings and information will appear here</p>
+          <div className="user-profile-card">
+            <div className="profile-header">
+              <img src={currentUserProfile.image} alt="Your profile" className="profile-avatar" />
+              <div className="profile-name-container">
+                <h2>{currentUserProfile.name}</h2>
+                <p className="major-minor">{currentUserProfile.majorMinor}</p>
+                <p className="class-year"><em>{currentUserProfile.classYear}</em></p>
+              </div>
+              <button 
+                className="edit-profile-button" 
+                onClick={() => {
+                  if (isEditing) {
+                    // Reset form values when cancelling
+                    setEditFormValues({
+                      bio: currentUserProfile.bio,
+                      classes: currentUserProfile.classes,
+                      interests: currentUserProfile.interests.join(', ')
+                    });
+                  }
+                  setIsEditing(!isEditing);
+                }}
+              >
+                {isEditing ? 'Cancel' : 'Edit Profile'}
+              </button>
+            </div>
+            
+            {/* About Me Section */}
+            <div className="profile-section">
+              <h3>About Me</h3>
+              {isEditing ? (
+                <textarea 
+                  className="profile-edit-field" 
+                  value={editFormValues.bio}
+                  onChange={(e) => setEditFormValues({...editFormValues, bio: e.target.value})}
+                  placeholder="Tell others about yourself..."
+                />
+              ) : (
+                <p>{currentUserProfile.bio}</p>
+              )}
+            </div>
+            
+            {/* Classes Section */}
+            <div className="profile-section">
+              <h3>My Classes</h3>
+              {isEditing ? (
+                <input 
+                  type="text" 
+                  className="profile-edit-field" 
+                  value={editFormValues.classes}
+                  onChange={(e) => setEditFormValues({...editFormValues, classes: e.target.value})}
+                  placeholder="Enter your classes (e.g. CS 278, PSYC 135)"
+                />
+              ) : (
+                <p>{currentUserProfile.classes}</p>
+              )}
+            </div>
+            
+            {/* Interests Section */}
+            <div className="profile-section">
+              <h3>My Interests</h3>
+              {isEditing ? (
+                <input 
+                  type="text" 
+                  className="profile-edit-field" 
+                  value={editFormValues.interests}
+                  onChange={(e) => setEditFormValues({...editFormValues, interests: e.target.value})}
+                  placeholder="Enter interests separated by commas"
+                />
+              ) : (
+                <div className="interest-tags">
+                  {currentUserProfile.interests.map((tag) => (
+                    <span key={tag} className="interest-pill">{tag}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Save Button when editing */}
+            {isEditing && (
+              <button 
+                className="save-profile-button" 
+                onClick={() => {
+                  // Save the changes to the current user profile
+                  const updatedProfile = {
+                    ...currentUserProfile,
+                    bio: editFormValues.bio,
+                    classes: editFormValues.classes,
+                    interests: editFormValues.interests.split(',').map(item => item.trim())
+                  };
+                  
+                  // Update the profile
+                  setCurrentUserProfile(updatedProfile);
+                  
+                  // Exit editing mode
+                  setIsEditing(false);
+                  
+                  console.log('Profile updated:', updatedProfile);
+                }}
+              >
+                Save Changes
+              </button>
+            )}
+            
+            {/* Logout Button */}
+            <div className="logout-container">
+              <button 
+                className="logout-button" 
+                onClick={() => {
+                  signOut(auth).then(() => {
+                    navigate('/');
+                    console.log('User logged out successfully');
+                  }).catch(error => {
+                    console.error('Error logging out:', error);
+                  });
+                }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       )}
