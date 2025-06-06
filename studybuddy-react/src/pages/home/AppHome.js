@@ -11,15 +11,15 @@ import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc
 // Import profile migration utilities
 import { migrateProfilesToFirebase, getAllProfilesFromFirebase, checkProfilesMigrated } from '../../utils/profileMigration';
 
-// Kevin's profile as the current user
+// Current user (demo)
 const kevinProfile = {
   name: 'Kevin',
   image: require('../../assets/Kevin.jpeg'),
-  majorMinor: 'Human–Computer Interaction',
+  majorMinor: 'Computer Science',
   classYear: 'Class of 2025',
   bio: `Usually camped at Green with headphones on. Open to anything from grind-mode to chatty review!`,
   classes: 'CS 278, CS 377U, PSYC 135',
-  interests: ['Economics', 'HCI', 'AI / ML', 'Education']
+  interests: ['AI / ML', 'UX / Design Thinking', 'Startups / VC']
 };
 
 // Master list of profiles (other users)
@@ -270,7 +270,7 @@ function AppHome() {
     "How about Coda?"
   ];
 
-  // Computed property to check if we've seen all profiles
+  // Computed property to check if we've seen all prçofiles
   const allProfilesSeen = currentIndex >= profileDeck.length;
 
   // Handle card swiping with proper state management

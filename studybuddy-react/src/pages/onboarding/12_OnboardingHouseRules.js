@@ -3,12 +3,14 @@ import '../../styles/OnboardingBase.css';
 import { useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ProgressBar';
 import { saveOnboardingData } from '../../services/userService';
+import { useUser } from '../../contexts/UserContext';
 
 function OnboardingHouseRules() {
   const [accepted, setAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const { refreshUserData } = useUser();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -80,8 +82,14 @@ function OnboardingHouseRules() {
         ];
         onboardingKeys.forEach(key => localStorage.removeItem(key));
         
-        console.log('Profile created successfully, navigating to home');
-        // Navigate to the home page
+        console.log('Profile created successfully');
+        
+        // Refresh user data to update the onboardingComplete flag in context
+        console.log('Refreshing user data before navigating...');
+        await refreshUserData();
+        
+        // Navigate to the home page using absolute path
+        console.log('User data refreshed, navigating to home');
         navigate('/home');
       } else {
         throw new Error(result.error || 'Failed to save data');
