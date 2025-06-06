@@ -21,6 +21,9 @@ import OnboardingBio from './pages/onboarding/11_OnboardingBio';
 import OnboardingHouseRules from './pages/onboarding/12_OnboardingHouseRules';
 import AppHome from './pages/home/AppHome';
 import Calendar from './pages/calendar/Calendar';
+import NormViolationForm from "./components/NormViolationForm";
+import NormViolationModal from "./components/NormViolationPopup";
+
 
 function Home() {
   const navigate = useNavigate();
@@ -161,6 +164,9 @@ function App() {
             <Calendar />
           </ProtectedRoute>
         } />
+
+        <Route path="/safety" element={<NormViolationForm />} /> {/* connecting norm violation report */}
+
       </Routes>
     </AppProviders>
   );

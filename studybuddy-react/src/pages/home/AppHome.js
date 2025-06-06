@@ -10,6 +10,8 @@ import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc
 
 // Import profile migration utilities
 import { migrateProfilesToFirebase, getAllProfilesFromFirebase, checkProfilesMigrated } from '../../utils/profileMigration';
+import NormViolationModal from "../../components/NormViolationPopup";
+
 
 // Current user (demo)
 const kevinProfile = {
@@ -217,6 +219,8 @@ function shuffle(array) {
 }
 
 function AppHome() {
+  const [showSafetyModal, setShowSafetyModal] = useState(false);
+
   const navigate = useNavigate();
   
   // Set Kevin as the current user profile with ability to update
@@ -1384,8 +1388,8 @@ function AppHome() {
             
             {/* Logout Button */}
             <div className="logout-container">
-              <button 
-                className="logout-button" 
+              <button
+                className="logout-button"
                 onClick={() => {
                   signOut(auth).then(() => {
                     navigate('/');
@@ -1397,12 +1401,29 @@ function AppHome() {
               >
                 Logout
               </button>
+
+              <button
+                className="logout-button"
+                style={{ backgroundColor: "#e53e3e", marginLeft: "0.5rem" }}
+                onClick={() => setShowSafetyModal(true)}
+              >
+                Safety
+              </button>
+
             </div>
+
           </div>
         </div>
       )}
+      <NormViolationModal
+        isOpen={showSafetyModal}
+        onClose={() => setShowSafetyModal(false)}
+      />
+
     </div>
+    
   );
+  
 }
 
 export default AppHome;
