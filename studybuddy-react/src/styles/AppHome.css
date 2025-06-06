@@ -138,8 +138,8 @@
 .swipe-instructions {
   position: absolute;
   top: 0;
-  left: 0;
-  width: 100%;
+  left: -120%;
+  width: 300%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
   z-index: 1000;
@@ -228,7 +228,7 @@
 /* Each swipeable card */
 .swipe {
   position: absolute;
-  width: 100%;
+  width: 400%;
   max-width: 600px;
   height: auto; /* Allow height to adjust to content */
   padding: 0; /* Remove padding to allow profile-card to control padding */
@@ -236,7 +236,7 @@
   background-color: #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   margin: 0 auto;
-  left: 0;
+  left: -150%;
   right: 0;
   cursor: pointer;
   box-sizing: border-box;

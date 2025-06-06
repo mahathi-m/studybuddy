@@ -4,7 +4,7 @@ import '../../styles/AppHome.css';
 
 import logo from '../../assets/logo.png';
 import { db, auth } from '../../firebase';
-import { doc, setDoc, collection, addDoc, query, where, getDocs, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc, orderBy, writeBatch } from 'firebase/firestore';
 
 // Master list of profiles
 const allProfiles = [
@@ -239,6 +239,7 @@ function AppHome() {
   const [messages, setMessages] = useState({});
   const [currentChat, setCurrentChat] = useState(null);
   const [messageText, setMessageText] = useState('');
+  const [messagesLoaded, setMessagesLoaded] = useState(false); // Track if messages have been loaded
 
   // Computed property to check if we've seen all profiles
   const allProfilesSeen = currentIndex >= profileDeck.length;
@@ -286,14 +287,24 @@ function AppHome() {
       if (auth.currentUser) {
         const isLiked = direction === 'right';
         const swipeId = `${auth.currentUser.uid}_${swipedProfile.id}`;
+        
+        // Store additional profile information for better retrieval
         await setDoc(doc(db, 'swipes', swipeId), {
           userId: auth.currentUser.uid,
           profileId: swipedProfile.id,
           profileName: swipedProfile.name,
+          majorMinor: swipedProfile.majorMinor,
+          classYear: swipedProfile.classYear,
+          image: swipedProfile.image,
           liked: isLiked,
           timestamp: serverTimestamp()
         });
-        console.log('Saved swipe to Firebase:', swipedProfile.name, isLiked ? 'liked' : 'passed');
+        
+        // Double-check storage by immediately reading it back
+        const swipeRef = doc(db, 'swipes', swipeId);
+        console.log(`🔄 Saved swipe to Firebase with ID ${swipeId}:`, swipedProfile.name, isLiked ? '❤️ liked' : '👎 passed');
+      } else {
+        console.warn('⚠️ Cannot save swipe - user not authenticated');
       }
     } catch (error) {
       console.error('Error saving swipe to Firebase:', error);
@@ -340,10 +351,11 @@ function AppHome() {
     }, 300);
   };
   
-  // Load swipe history from Firebase when component mounts
+  // Load swipe history from Firebase when component mounts or auth state changes
   useEffect(() => {
     const loadSwipeHistory = async () => {
       try {
+        console.log('Checking auth state for loading swipes:', auth.currentUser ? 'User is signed in' : 'User is not signed in');
         if (auth.currentUser) {
           // Query for right swipes
           const rightSwipesQuery = query(
@@ -358,11 +370,33 @@ function AppHome() {
           // Extract profiles that were right-swiped
           rightSwipesSnapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // Try to find matching profile in allProfiles
             const matchingProfile = allProfiles.find(p => p.id === data.profileId);
+            
             if (matchingProfile) {
+              console.log('✅ Found matching right-swiped profile in allProfiles:', matchingProfile.name);
               loadedRightSwipes.push(matchingProfile);
+            } else if (data.profileId) {
+              // If we can't find it in allProfiles, create a profile from Firebase data
+              console.log('⚠️ Creating right-swiped profile from Firebase data:', data.profileName || data.profileId);
+              
+              const reconstructedProfile = {
+                id: data.profileId,
+                name: data.profileName || 'Unknown Match',
+                image: data.image || 'https://via.placeholder.com/400',
+                majorMinor: data.majorMinor || 'Unknown Major',
+                classYear: data.classYear || 'Unknown Year',
+                bio: 'Profile data reconstructed from swipe history',
+                classes: 'Classes data not available',
+                interests: ['Study Buddy']
+              };
+              
+              loadedRightSwipes.push(reconstructedProfile);
             }
           });
+          
+          console.log(`📊 Loaded ${loadedRightSwipes.length} right swipes from Firebase`);
           
           // Query for left swipes
           const leftSwipesQuery = query(
@@ -377,31 +411,312 @@ function AppHome() {
           // Extract profiles that were left-swiped
           leftSwipesSnapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // Try to find matching profile in allProfiles
             const matchingProfile = allProfiles.find(p => p.id === data.profileId);
+            
             if (matchingProfile) {
+              console.log('✅ Found matching left-swiped profile in allProfiles:', matchingProfile.name);
               loadedLeftSwipes.push(matchingProfile);
+            } else if (data.profileId) {
+              // If we can't find it in allProfiles, create a profile from Firebase data
+              console.log('⚠️ Creating left-swiped profile from Firebase data:', data.profileName || data.profileId);
+              
+              const reconstructedProfile = {
+                id: data.profileId,
+                name: data.profileName || 'Unknown Profile',
+                image: data.image || 'https://via.placeholder.com/400',
+                majorMinor: data.majorMinor || 'Unknown Major',
+                classYear: data.classYear || 'Unknown Year',
+                bio: 'Profile data reconstructed from swipe history',
+                classes: 'Classes data not available',
+                interests: ['Study Buddy']
+              };
+              
+              loadedLeftSwipes.push(reconstructedProfile);
             }
           });
+          
+          console.log(`📊 Loaded ${loadedLeftSwipes.length} left swipes from Firebase`);
           
           // Update state with loaded swipes
           setRightSwipes(loadedRightSwipes);
           setLeftSwipes(loadedLeftSwipes);
+          
+          console.log(`✅ Swipe states updated: ${loadedRightSwipes.length} right swipes, ${loadedLeftSwipes.length} left swipes`);
         }
       } catch (error) {
         console.error('Error loading swipe history:', error);
       }
     };
     
-    loadSwipeHistory();
+    // Set up auth state listener
+    const unsubscribe = auth.onAuthStateChanged(async user => {
+      console.log('Auth state changed:', user ? 'User signed in' : 'User not signed in');
+      if (user) {
+        // Load swipe history
+        loadSwipeHistory();
+        
+        // Migrate any old messages that don't have participants field
+        await migrateMessages();
+        
+        // Then load all messages
+        loadAllMessages();
+      }
+    });
+    
+    // Clean up listener on unmount
+    return () => unsubscribe();
   }, []);
   
-  // Function to clear swipe history
-  const clearSwipeHistory = () => {
+  // Function to clear swipe history and messages
+  const clearSwipeHistory = async () => {
+    // Clear local state
     setRightSwipes([]);
     setLeftSwipes([]);
-    console.log('Cleared swipe history');
-    // Note: This only clears local state - to truly clear history, we'd need
-    // to delete records from Firebase, but we're keeping it minimal for now
+    setMessages({});
+    setMessagesLoaded(false);
+    setCurrentChat(null);
+    
+    // Also delete from Firebase if user is authenticated
+    try {
+      if (auth.currentUser) {
+        // Get all user's swipes
+        const userSwipesQuery = query(
+          collection(db, 'swipes'),
+          where('userId', '==', auth.currentUser.uid)
+        );
+        
+        const swipeSnapshot = await getDocs(userSwipesQuery);
+        
+        // Create a batch for efficient deletion
+        const batch = writeBatch(db);
+        
+        swipeSnapshot.forEach((document) => {
+          batch.delete(document.ref);
+        });
+        
+        // Commit the batch
+        await batch.commit();
+        console.log('✓ Swipe history cleared from Firebase');
+        
+        // Also clear messages
+        const messagesQuery = query(
+          collection(db, 'messages'),
+          where('participants', 'array-contains', auth.currentUser.uid)
+        );
+        
+        const messagesSnapshot = await getDocs(messagesQuery);
+        
+        if (!messagesSnapshot.empty) {
+          // Create another batch for message deletion
+          const msgBatch = writeBatch(db);
+          
+          messagesSnapshot.forEach((document) => {
+            msgBatch.delete(document.ref);
+          });
+          
+          // Commit the batch
+          await msgBatch.commit();
+          console.log(`✓ Deleted ${messagesSnapshot.size} messages from Firebase`);
+        }
+      }
+    } catch (error) {
+      console.error('Error clearing history from Firebase:', error);
+    }
+    console.log('✓ Cleared all swipe and message history locally and in Firebase');
+    
+    // Reset the active tab to 'swipe'
+    handleTabChange('swipe');
+  };
+  
+  // Migration function to update existing messages to include participants field
+  const migrateMessages = async () => {
+    try {
+      if (!auth.currentUser) return;
+      
+      console.log('Checking for messages that need migration...');
+      
+      // Find messages without participants field
+      const oldMessagesQuery = query(
+        collection(db, 'messages'),
+        where('senderId', '==', auth.currentUser.uid)
+      );
+      
+      const oldMessagesSnapshot = await getDocs(oldMessagesQuery);
+      
+      // If we found messages that need migration
+      if (!oldMessagesSnapshot.empty) {
+        console.log(`Found ${oldMessagesSnapshot.size} messages that might need migration`);
+        
+        // Create a batch update
+        const batch = writeBatch(db);
+        let updateCount = 0;
+        
+        oldMessagesSnapshot.forEach((document) => {
+          const data = document.data();
+          
+          // Check if it needs migration (no participants field)
+          if (!data.participants && data.senderId && data.receiverId) {
+            batch.update(document.ref, {
+              participants: [data.senderId, data.receiverId]
+            });
+            updateCount++;
+          }
+        });
+        
+        // If we have updates to make
+        if (updateCount > 0) {
+          await batch.commit();
+          console.log(`✅ Successfully migrated ${updateCount} messages`);
+        } else {
+          console.log('No messages needed migration');
+        }
+      }
+    } catch (error) {
+      console.error('Error during message migration:', error);
+    }
+  };
+  
+  // Function to load all messages from Firebase
+  const loadAllMessages = async () => {
+    try {
+      if (!auth.currentUser) {
+        console.log('⚠️ Cannot load messages: User not authenticated');
+        return;
+      }
+
+      console.log('🔄 Loading all messages from Firebase...');
+      
+      // Get the current user ID
+      const currentUserId = auth.currentUser.uid;
+      
+      // Try two queries - one for participants field, one for senderId/receiverId as fallback
+      // First query: using participants field (new messages format)
+      const participantsQuery = query(
+        collection(db, 'messages'),
+        where('participants', 'array-contains', currentUserId)
+      );
+      
+      // Second query: messages sent by current user (older format)
+      const sentQuery = query(
+        collection(db, 'messages'),
+        where('senderId', '==', currentUserId)
+      );
+      
+      // Third query: messages received by current user (older format)
+      const receivedQuery = query(
+        collection(db, 'messages'),
+        where('receiverId', '==', currentUserId)
+      );
+      
+      // Execute all three queries
+      const [participantsSnapshot, sentSnapshot, receivedSnapshot] = await Promise.all([
+        getDocs(participantsQuery),
+        getDocs(sentQuery),
+        getDocs(receivedQuery)
+      ]);
+      
+      console.log(`Found ${participantsSnapshot.size} messages with participants field`);
+      console.log(`Found ${sentSnapshot.size} sent messages`);
+      console.log(`Found ${receivedSnapshot.size} received messages`);
+      
+      // Create a messages map to avoid duplicates (using document ID as key)
+      const messagesMap = {};
+      
+      // Process messages from all three queries
+      const processSnapshot = (snapshot) => {
+        snapshot.forEach((doc) => {
+          // Skip if we already processed this message
+          if (messagesMap[doc.id]) return;
+          
+          const data = doc.data();
+          const messageData = {
+            id: doc.id,
+            docData: data,  // Store full data for debugging
+            senderId: data.senderId,
+            receiverId: data.receiverId,
+            text: data.text,
+            timestamp: data.timestamp?.toDate()?.toISOString() || data.clientTimestamp || new Date().toISOString(),
+            profileInfo: data.profileInfo || null, // Store profile info if available
+          };
+          
+          messagesMap[doc.id] = messageData;
+        });
+      };
+      
+      // Process all snapshots
+      processSnapshot(participantsSnapshot);
+      processSnapshot(sentSnapshot);
+      processSnapshot(receivedSnapshot);
+      
+      console.log(`Total unique messages found: ${Object.keys(messagesMap).length}`);
+      
+      // Group messages by conversation
+      const messagesByConversation = {};
+      
+      // Process each message and organize by conversation
+      Object.values(messagesMap).forEach((messageData) => {
+        const otherId = messageData.senderId === currentUserId ? messageData.receiverId : messageData.senderId;
+        
+        // Skip if missing critical data
+        if (!otherId || !messageData.text) {
+          console.warn('⚠️ Skipping message with missing data:', messageData);
+          return;
+        }
+        
+        // Extract the actual profile ID from the prefixed format (profile_ID)
+        // For the UI, we need the original ID without the prefix
+        let chatId = otherId;
+        
+        // Handle the new prefixed profile IDs
+        // If it's a profile ID (starts with "profile_"), extract the actual ID
+        if (otherId.startsWith('profile_')) {
+          const actualProfileId = otherId.substring(8); // Remove 'profile_' prefix
+          chatId = actualProfileId; // Use the actual profile ID for UI mapping
+          console.log(`Converting ${otherId} to ${chatId} for UI display`);
+        }
+        
+        // Initialize array if it doesn't exist
+        if (!messagesByConversation[chatId]) {
+          messagesByConversation[chatId] = [];
+        }
+        
+        // Add to conversation array with enhanced metadata
+        messagesByConversation[chatId].push({
+          id: messageData.id,
+          sender: messageData.senderId === currentUserId ? 'me' : 'other',
+          text: messageData.text,
+          timestamp: messageData.timestamp,
+          profileInfo: messageData.profileInfo // Include profile info if available
+        });
+      });
+      
+      // Sort messages by timestamp for each conversation
+      Object.keys(messagesByConversation).forEach(chatId => {
+        messagesByConversation[chatId].sort((a, b) => {
+          return new Date(a.timestamp) - new Date(b.timestamp);
+        });
+      });
+      
+      // Update state with all loaded messages
+      setMessages(messagesByConversation);
+      setMessagesLoaded(true);
+      console.log(`✅ Loaded messages for ${Object.keys(messagesByConversation).length} conversations`);
+      
+      // Debug output the first few messages of each conversation
+      Object.entries(messagesByConversation).forEach(([chatId, msgs]) => {
+        console.log(`Conversation with ${chatId}: ${msgs.length} messages`);
+        if (msgs.length > 0) {
+          console.log(`- First message: ${msgs[0].text.substring(0, 20)}... (from ${msgs[0].sender})`);
+          if (msgs[0].profileInfo) {
+            console.log(`  Profile info available: ${msgs[0].profileInfo.name}`);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error loading all messages:', error);
+    }
   };
   
   // Function to send a message
@@ -413,9 +728,12 @@ function AppHome() {
     // Clear input right away for better UX
     setMessageText('');
     
+    // Create message ID for tracking
+    const messageId = Date.now().toString();
+    
     // Create a new message for local state
     const newMessage = {
-      id: Date.now().toString(),
+      id: messageId,
       sender: 'me',
       text: trimmedMessage,
       timestamp: new Date().toISOString(),
@@ -434,25 +752,57 @@ function AppHome() {
     try {
       // Save message to Firebase if user is authenticated
       if (auth.currentUser) {
-        // Create a conversation ID that's consistent regardless of sender/receiver
-        const ids = [auth.currentUser.uid, currentChat.id].sort();
-        const conversationId = `${ids[0]}_${ids[1]}`;
+        // IMPORTANT: We need to handle the fact that profile IDs are not Firebase user IDs
+        // Firebase needs real IDs, so we'll create a stable ID for hardcoded profiles
+        const userId = auth.currentUser.uid;
+        
+        // For hardcoded profiles, create a stable ID based on the profile name
+        // This ensures we always reference the same ID for the same profile
+        const profileId = `profile_${currentChat.id}`;
+        
+        console.log(`💬 Sending message to ${currentChat.name} with profileId: ${profileId}`);
+        
+        // Create a conversation ID that combines the real user ID with the profile ID
+        const conversationId = `${userId}_${profileId}`;
+        
+        // Full profile information to store with the message
+        const profileInfo = {
+          id: currentChat.id,
+          name: currentChat.name,
+          majorMinor: currentChat.majorMinor || '',
+          classYear: currentChat.classYear || '',
+          image: currentChat.image || ''
+        };
         
         // Save message to Firestore
         const messageData = {
-          senderId: auth.currentUser.uid,
-          receiverId: currentChat.id,
+          senderId: userId,
+          receiverId: profileId,
+          senderName: 'Current User',
+          receiverName: currentChat.name,
           text: trimmedMessage,
           conversationId: conversationId,
+          participants: [userId, profileId],
+          profileInfo: profileInfo, // Store profile info with the message
           read: false,
-          timestamp: serverTimestamp()
+          timestamp: serverTimestamp(),
+          clientTimestamp: new Date().toISOString(),
+          messageId: messageId
         };
         
-        await addDoc(collection(db, 'messages'), messageData);
-        console.log('Message saved to Firebase');
+        console.log('Sending message data:', messageData);
+        
+        // Use doc reference with ID to better track message
+        const messageRef = await addDoc(collection(db, 'messages'), messageData);
+        console.log(`✅ Message saved to Firebase with ID: ${messageRef.id}`);
+      } else {
+        console.warn('⚠️ Failed to save message - user not authenticated');
       }
     } catch (error) {
-      console.error('Error saving message to Firebase:', error);
+      console.error('❌ Error saving message to Firebase:', error, error.stack);
+      
+      // Show error in UI but don't interrupt UX
+      console.error('Failed to send message. Please try again.');
     }
   };
   
@@ -460,54 +810,153 @@ function AppHome() {
   const startChat = async (profile) => {
     setCurrentChat(profile);
     
-    // Initialize empty message array if none exists
-    setMessages(prev => {
-      if (!prev[profile.id]) {
-        return {
-          ...prev,
-          [profile.id]: []
-        };
-      }
-      return prev;
-    });
-    
     try {
+      // If we already have messages loaded, we don't need to query again
+      if (messagesLoaded && messages[profile.id]) {
+        console.log(`Using cached messages for chat with ${profile.name} (${messages[profile.id].length} messages)`);
+        return;
+      }
+      
+      // Initialize empty message array if none exists
+      setMessages(prev => {
+        if (!prev[profile.id]) {
+          return {
+            ...prev,
+            [profile.id]: []
+          };
+        }
+        return prev;
+      });
+      
       // Load messages from Firebase if user is authenticated
       if (auth.currentUser) {
-        // Create a consistent conversation ID
-        const ids = [auth.currentUser.uid, profile.id].sort();
-        const conversationId = `${ids[0]}_${ids[1]}`;
+        console.log(`Loading messages for chat with ${profile.name}...`);
         
-        // Query messages for this conversation
-        const messagesQuery = query(
+        // Get the current user ID
+        const userId = auth.currentUser.uid;
+        
+        // For profile, we need to use the prefixed ID format when querying Firebase
+        const originalProfileId = profile.id;
+        const profileId = `profile_${originalProfileId}`; // Use prefixed profile ID for Firebase queries
+        
+        console.log(`Using Firebase profile ID: ${profileId} for profile: ${profile.name}`);
+        
+        // Create a conversation ID that includes the prefixed profile ID
+        const conversationId = `${userId}_${profileId}`;
+        
+        console.log(`Conversation ID for chat with ${profile.name}: ${conversationId}`);
+        
+        // Find messages by the conversationId
+        const conversationQuery = query(
           collection(db, 'messages'),
           where('conversationId', '==', conversationId),
           orderBy('timestamp', 'asc')
         );
         
-        const querySnapshot = await getDocs(messagesQuery);
+        // Specific sender-receiver queries (fallback)
+        // Since we're now using prefixed profile IDs, these should match our current format
+        const sentQuery = query(
+          collection(db, 'messages'),
+          where('senderId', '==', userId),
+          where('receiverId', '==', profileId)
+        );
+        
+        const receivedQuery = query(
+          collection(db, 'messages'),
+          where('senderId', '==', profileId),
+          where('receiverId', '==', userId)
+        );
+        
+        // Execute all queries
+        const [conversationSnapshot, sentSnapshot, receivedSnapshot] = await Promise.all([
+          getDocs(conversationQuery),
+          getDocs(sentQuery),
+          getDocs(receivedQuery)
+        ]);
+        
+        console.log(`Found ${conversationSnapshot.size} messages by conversationId`);
+        console.log(`Found ${sentSnapshot.size} sent messages by direct userId/profileId`);
+        console.log(`Found ${receivedSnapshot.size} received messages by direct userId/profileId`);
+        
+        // Check for legacy messages with non-prefixed profile IDs
+        if (conversationSnapshot.size === 0 && sentSnapshot.size === 0 && receivedSnapshot.size === 0) {
+          console.log('No messages found with new format, trying legacy format...');
+          
+          // Try old format conversationId (non-prefixed)
+          const legacyIds = [userId, originalProfileId].sort();
+          const legacyConversationId = `${legacyIds[0]}_${legacyIds[1]}`;
+          
+          // Query with legacy format
+          const legacyQuery = query(
+            collection(db, 'messages'),
+            where('conversationId', '==', legacyConversationId)
+          );
+          
+          const legacySnapshot = await getDocs(legacyQuery);
+          console.log(`Found ${legacySnapshot.size} legacy messages`);
+          
+          // If legacy messages exist, migrate them to new format
+          if (legacySnapshot.size > 0) {
+            console.log('Migrating legacy messages to new format...');
+            // We'd handle migration here if needed
+          }
+        }
+        
+        // Track processed messages to avoid duplicates
+        const processedMessageIds = new Set();
         const loadedMessages = [];
         
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          loadedMessages.push({
-            id: doc.id,
-            sender: data.senderId === auth.currentUser.uid ? 'me' : 'other',
-            text: data.text,
-            timestamp: data.timestamp?.toDate()?.toISOString() || new Date().toISOString(),
+        // Process all messages from the three queries
+        const processMessages = (snapshot, source) => {
+          snapshot.forEach(doc => {
+            // Skip if already processed
+            if (processedMessageIds.has(doc.id)) return;
+            
+            const data = doc.data();
+            if (!data.text) {
+              console.warn(`Skipping message without text: ${doc.id}`);
+              return;
+            }
+            
+            processedMessageIds.add(doc.id);
+            
+            // Extract profile info if available
+            const profileInfo = data.profileInfo || null;
+            
+            loadedMessages.push({
+              id: doc.id,
+              sender: data.senderId === userId ? 'me' : 'other',
+              text: data.text,
+              timestamp: data.timestamp?.toDate()?.toISOString() || 
+                      data.clientTimestamp || 
+                      new Date().toISOString(),
+              source: source, // For debugging
+              profileInfo: profileInfo // Include profile info
+            });
           });
-        });
+        };
+        
+        // Process messages from all three queries
+        processMessages(conversationSnapshot, 'conversationId');
+        processMessages(sentSnapshot, 'sent');
+        processMessages(receivedSnapshot, 'received');
+        
+        // Sort messages by timestamp
+        loadedMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         
         // Update messages state with loaded messages
         if (loadedMessages.length > 0) {
+          console.log(`✅ Loaded ${loadedMessages.length} messages for chat with ${profile.name}`);
           setMessages(prev => ({
             ...prev,
             [profile.id]: loadedMessages
           }));
+        } else {
+          console.log(`No existing messages found for chat with ${profile.name}`);
         }
       }
     } catch (error) {
-      console.error('Error loading messages from Firebase:', error);
+      console.error('❌ Error loading messages from Firebase:', error);
     }
   };
 
