@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TinderCard from 'react-tinder-card';
 import '../../styles/AppHome.css';
 
 import logo from '../../assets/logo.png';
+import { db, auth } from '../../firebase';
+import { doc, setDoc, collection, addDoc, query, where, getDocs, orderBy, serverTimestamp } from 'firebase/firestore';
 
 // Master list of profiles
 const allProfiles = [
@@ -188,102 +190,581 @@ const allProfiles = [
   }
 ];
 
-// Shuffle helper
-const shuffle = (arr) => {
-  return arr.map((a) => ({ sort: Math.random(), value: a }))
-            .sort((a, b) => a.sort - b.sort)
-            .map((a) => ({ ...a.value, id: crypto.randomUUID() }));
-};
+// Shuffle function to randomize profiles and assign unique IDs
+function shuffle(array) {
+  // First assign IDs if they don't exist
+  const arrayWithIds = array.map(profile => {
+    if (!profile.id) {
+      return { ...profile, id: `profile-${profile.name.toLowerCase().replace(/\s+/g, '-')}-${Math.random().toString(36).substring(2, 10)}` };
+    }
+    return profile;
+  });
+  
+  // Then shuffle the array
+  const newArray = [...arrayWithIds];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
 
 function AppHome() {
-  const [profileQueue, setProfileQueue] = useState(shuffle(allProfiles));
+  // Use two pieces of state: current profile index and the full shuffled deck
+  const [profileDeck, setProfileDeck] = useState(() => shuffle(allProfiles));
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [lastDirection, setLastDirection] = useState();
+  const [loading, setLoading] = useState(false);
+  
+  // Track who was swiped left/right
+  const [rightSwipes, setRightSwipes] = useState([]);
+  const [leftSwipes, setLeftSwipes] = useState([]);
+  
+  // Show instructional overlay at first
+  const [showInstructions, setShowInstructions] = useState(true);
+  
+  // Active tab state (swipe or messages)
+  const [activeTab, setActiveTab] = useState('swipe');
+  
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    // Reset current chat when switching away from messages
+    if (tab !== 'messages') {
+      setCurrentChat(null);
+    }
+  };
+  
+  // Messages state
+  const [messages, setMessages] = useState({});
+  const [currentChat, setCurrentChat] = useState(null);
+  const [messageText, setMessageText] = useState('');
 
-  // Keep track of which cards have been swiped
-  const [swiped, setSwiped] = useState([]);
+  // Computed property to check if we've seen all profiles
+  const allProfilesSeen = currentIndex >= profileDeck.length;
 
+  // Handle card swiping with proper state management
+  const swiped = async (direction, nameToDelete, index) => {
+    console.log(`Swiped ${direction} on ${nameToDelete}`);
+    setLastDirection(direction);
+    
+    // Get the actual profile that was swiped by its index in the deck
+    const actualIndex = currentIndex + (index - currentIndex);
+    const swipedProfile = profileDeck[actualIndex];
+    
+    console.log('Swiped profile:', swipedProfile);
+    
+    // Update state based on swipe direction
+    if (direction === 'right') {
+      // Make sure we don't add duplicates
+      setRightSwipes(prev => {
+        // Check if this profile is already in the rightSwipes array
+        const isDuplicate = prev.some(p => p.id === swipedProfile.id);
+        if (isDuplicate) {
+          console.log('Profile already in right swipes:', swipedProfile.name);
+          return prev;
+        }
+        return [...prev, swipedProfile];
+      });
+      console.log('Right swiped (liked):', swipedProfile.name);
+    } else {
+      // Make sure we don't add duplicates
+      setLeftSwipes(prev => {
+        // Check if this profile is already in the leftSwipes array
+        const isDuplicate = prev.some(p => p.id === swipedProfile.id);
+        if (isDuplicate) {
+          console.log('Profile already in left swipes:', swipedProfile.name);
+          return prev;
+        }
+        return [...prev, swipedProfile];
+      });
+      console.log('Left swiped (passed):', swipedProfile.name);
+    }
+    
+    // Persist swipe to Firestore if user is authenticated
+    try {
+      if (auth.currentUser) {
+        const isLiked = direction === 'right';
+        const swipeId = `${auth.currentUser.uid}_${swipedProfile.id}`;
+        await setDoc(doc(db, 'swipes', swipeId), {
+          userId: auth.currentUser.uid,
+          profileId: swipedProfile.id,
+          profileName: swipedProfile.name,
+          liked: isLiked,
+          timestamp: serverTimestamp()
+        });
+        console.log('Saved swipe to Firebase:', swipedProfile.name, isLiked ? 'liked' : 'passed');
+      }
+    } catch (error) {
+      console.error('Error saving swipe to Firebase:', error);
+    }
+    
+    // Hide instructions after first swipe
+    if (showInstructions) {
+      setShowInstructions(false);
+    }
+    
+    // Move to the next card with a slight delay for animation
+    setTimeout(() => {
+      setCurrentIndex(prevIndex => prevIndex + 1);
+    }, 300);
+  }
+
+  // Handle when card leaves screen (optional, for additional effects)
   const outOfFrame = (name) => {
     console.log(`${name} left the screen!`);
-  };
+  }
 
-  const handleSwipe = (direction, index) => {
-    console.log(`Swiped ${direction} on ${profileQueue[index]?.name || 'profile'}`);    
-    setSwiped((prevSwiped) => [...prevSwiped, index]);
+  // Get only the profiles we need to render (current and a few ahead)
+  const activeProfiles = profileDeck.slice(currentIndex, currentIndex + 5);
+
+  // Reset function with loading state to avoid UI glitches
+  const resetProfiles = () => {
+    // Set loading state to prevent UI flicker
+    setLoading(true);
     
-    // Wait a moment before updating the queue to allow the animation to complete
+    // Give time for state update to finish
     setTimeout(() => {
-      setProfileQueue((prevQueue) => {
-        const newQueue = [...prevQueue];
-        newQueue.splice(index, 1); // Remove the swiped card
-        return newQueue;
-      });
-      setSwiped([]); // Reset swiped cards
+      // Generate a completely new shuffled deck
+      setProfileDeck(shuffle(allProfiles));
+      // Reset the index
+      setCurrentIndex(0);
+      // Clear the last direction
+      setLastDirection(undefined);
+      // Show instructions again
+      setShowInstructions(true);
+      // Keep swipe history for reference, but show an option to clear it
+      // End loading state
+      setLoading(false);
+      console.log('Reshuffled and reset all profiles');
     }, 300);
+  };
+  
+  // Load swipe history from Firebase when component mounts
+  useEffect(() => {
+    const loadSwipeHistory = async () => {
+      try {
+        if (auth.currentUser) {
+          // Query for right swipes
+          const rightSwipesQuery = query(
+            collection(db, 'swipes'),
+            where('userId', '==', auth.currentUser.uid),
+            where('liked', '==', true)
+          );
+          
+          const rightSwipesSnapshot = await getDocs(rightSwipesQuery);
+          const loadedRightSwipes = [];
+          
+          // Extract profiles that were right-swiped
+          rightSwipesSnapshot.forEach((doc) => {
+            const data = doc.data();
+            const matchingProfile = allProfiles.find(p => p.id === data.profileId);
+            if (matchingProfile) {
+              loadedRightSwipes.push(matchingProfile);
+            }
+          });
+          
+          // Query for left swipes
+          const leftSwipesQuery = query(
+            collection(db, 'swipes'),
+            where('userId', '==', auth.currentUser.uid),
+            where('liked', '==', false)
+          );
+          
+          const leftSwipesSnapshot = await getDocs(leftSwipesQuery);
+          const loadedLeftSwipes = [];
+          
+          // Extract profiles that were left-swiped
+          leftSwipesSnapshot.forEach((doc) => {
+            const data = doc.data();
+            const matchingProfile = allProfiles.find(p => p.id === data.profileId);
+            if (matchingProfile) {
+              loadedLeftSwipes.push(matchingProfile);
+            }
+          });
+          
+          // Update state with loaded swipes
+          setRightSwipes(loadedRightSwipes);
+          setLeftSwipes(loadedLeftSwipes);
+        }
+      } catch (error) {
+        console.error('Error loading swipe history:', error);
+      }
+    };
+    
+    loadSwipeHistory();
+  }, []);
+  
+  // Function to clear swipe history
+  const clearSwipeHistory = () => {
+    setRightSwipes([]);
+    setLeftSwipes([]);
+    console.log('Cleared swipe history');
+    // Note: This only clears local state - to truly clear history, we'd need
+    // to delete records from Firebase, but we're keeping it minimal for now
+  };
+  
+  // Function to send a message
+  const sendMessage = async () => {
+    if (!messageText.trim() || !currentChat) return;
+    
+    const trimmedMessage = messageText.trim();
+    
+    // Clear input right away for better UX
+    setMessageText('');
+    
+    // Create a new message for local state
+    const newMessage = {
+      id: Date.now().toString(),
+      sender: 'me',
+      text: trimmedMessage,
+      timestamp: new Date().toISOString(),
+    };
+    
+    // Add to messages state (optimistic update)
+    setMessages(prevMessages => {
+      const chatId = currentChat.id;
+      const chatMessages = prevMessages[chatId] || [];
+      return {
+        ...prevMessages,
+        [chatId]: [...chatMessages, newMessage]
+      };
+    });
+    
+    try {
+      // Save message to Firebase if user is authenticated
+      if (auth.currentUser) {
+        // Create a conversation ID that's consistent regardless of sender/receiver
+        const ids = [auth.currentUser.uid, currentChat.id].sort();
+        const conversationId = `${ids[0]}_${ids[1]}`;
+        
+        // Save message to Firestore
+        const messageData = {
+          senderId: auth.currentUser.uid,
+          receiverId: currentChat.id,
+          text: trimmedMessage,
+          conversationId: conversationId,
+          read: false,
+          timestamp: serverTimestamp()
+        };
+        
+        await addDoc(collection(db, 'messages'), messageData);
+        console.log('Message saved to Firebase');
+      }
+    } catch (error) {
+      console.error('Error saving message to Firebase:', error);
+    }
+  };
+  
+  // Function to start a new chat and load previous messages
+  const startChat = async (profile) => {
+    setCurrentChat(profile);
+    
+    // Initialize empty message array if none exists
+    setMessages(prev => {
+      if (!prev[profile.id]) {
+        return {
+          ...prev,
+          [profile.id]: []
+        };
+      }
+      return prev;
+    });
+    
+    try {
+      // Load messages from Firebase if user is authenticated
+      if (auth.currentUser) {
+        // Create a consistent conversation ID
+        const ids = [auth.currentUser.uid, profile.id].sort();
+        const conversationId = `${ids[0]}_${ids[1]}`;
+        
+        // Query messages for this conversation
+        const messagesQuery = query(
+          collection(db, 'messages'),
+          where('conversationId', '==', conversationId),
+          orderBy('timestamp', 'asc')
+        );
+        
+        const querySnapshot = await getDocs(messagesQuery);
+        const loadedMessages = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          loadedMessages.push({
+            id: doc.id,
+            sender: data.senderId === auth.currentUser.uid ? 'me' : 'other',
+            text: data.text,
+            timestamp: data.timestamp?.toDate()?.toISOString() || new Date().toISOString(),
+          });
+        });
+        
+        // Update messages state with loaded messages
+        if (loadedMessages.length > 0) {
+          setMessages(prev => ({
+            ...prev,
+            [profile.id]: loadedMessages
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading messages from Firebase:', error);
+    }
   };
 
   return (
     <div className="app-home">
       <div className="home-header">
-        <img src={logo} alt="SyncUp Logo" className="logo" />
+        <img src={logo} alt="StudyBuddy Logo" className="home-logo" />
+        <div className="swipe-stats">
+          <span className="swipe-count liked">❤️ {rightSwipes.length}</span>
+          <span className="swipe-count passed">✕ {leftSwipes.length}</span>
+          {(rightSwipes.length > 0 || leftSwipes.length > 0) && (
+            <button className="clear-history" onClick={clearSwipeHistory}>Clear</button>
+          )}
+        </div>
+      </div>
+      
+      {/* Tab navigation */}
+      <div className="tabs-container">
+        <div 
+          className={`tab ${activeTab === 'swipe' ? 'active' : ''}`}
+          onClick={() => handleTabChange('swipe')}
+        >
+          🔥 Swipe
+        </div>
+        <div 
+          className={`tab ${activeTab === 'messages' ? 'active' : ''}`}
+          onClick={() => handleTabChange('messages')}
+        >
+          💬 Messages {rightSwipes.length > 0 && `(${rightSwipes.length})`}
+        </div>
+        <div 
+          className={`tab ${activeTab === 'calendar' ? 'active' : ''}`}
+          onClick={() => handleTabChange('calendar')}
+        >
+          📅 Calendar
+        </div>
+        <div 
+          className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
+          onClick={() => handleTabChange('profile')}
+        >
+          👤 Profile
+        </div>
       </div>
 
-      <div className="card-deck">
-        {profileQueue.length === 0 ? (
-          <div className="no-more-profiles">
-            <h3>No more profiles</h3>
-            <p>You've seen all available study buddies!</p>
-            <button 
-              className="restart-button"
-              onClick={() => setProfileQueue(shuffle(allProfiles))}
-            >
-              See All Profiles Again
-            </button>
-          </div>
-        ) : (
-          profileQueue.slice(0, 3).map((profile, index) => (
-          <TinderCard
-            key={profile.id || index}
-            className={`swipe ${swiped.includes(index) ? 'swiped' : ''}`}
-            preventSwipe={['up', 'down']}
-            onSwipe={(dir) => handleSwipe(dir, index)}
-            onCardLeftScreen={() => outOfFrame(profile.name)}
-            swipeRequirementType="position"
-            swipeThreshold={80}
-          >
-            <div className="profile-card" style={{ zIndex: 1000 - index }}>
-              <img src={profile.image} alt="Profile" className="profile-image" />
-              <h2>{profile.name}</h2>
-              <p className="major-minor">{profile.majorMinor}</p>
-              <p className="class-year"><em>{profile.classYear}</em></p>
-
-              <div className="bio-section">
-                <strong>About</strong>
-                <p className="bio-preview">{profile.bio}</p>
-              </div>
-
-              <div className="classes-section">
-                <strong>Classes</strong>
-                <p>{profile.classes}</p>
-              </div>
-
-              <div className="interests-section">
-                <strong>Interests</strong>
-                <div className="interest-tags">
-                  {profile.interests.map((tag) => (
-                    <span key={tag} className="interest-pill">{tag}</span>
-                  ))}
+      <div>
+        {activeTab === 'swipe' && (
+          <div className="swipe-container">
+            <div className="swipe-info">
+              {lastDirection ? <p>You swiped {lastDirection === 'right' ? '❤️ like' : '✕ pass'}</p> : <p>Swipe a card!</p>}
+            </div>
+          
+            {/* Instructional overlay */}
+            {showInstructions && !loading && !allProfilesSeen && profileDeck.length > currentIndex && (
+              <div className="swipe-instructions">
+                <div className="instructions-content">
+                  <h3>How to use StudyBuddy</h3>
+                  <div className="instruction-row">
+                    <div className="instruction-action">
+                      <div className="swipe-arrow left">←</div>
+                      <p>Swipe <strong>LEFT</strong> to pass</p>
+                    </div>
+                    <div className="instruction-action">
+                      <div className="swipe-arrow right">→</div>
+                      <p>Swipe <strong>RIGHT</strong> to connect</p>
+                    </div>
+                  </div>
+                  <button className="got-it-button" onClick={() => setShowInstructions(false)}>Got it!</button>
                 </div>
               </div>
-            </div>
-          </TinderCard>
-        )))}
+            )}
+            {loading ? (
+              <div className="loading-profiles">
+                <h3>Loading profiles...</h3>
+              </div>
+            ) : allProfilesSeen ? (
+              <div className="no-more-profiles">
+                <h3>No more profiles to swipe</h3>
+                <p>You've seen all available study buddies!</p>
+                <p>Check the chat section to connect with your matches.</p>
+                <button 
+                  className="restart-button"
+                  onClick={() => {
+                    // Set loading state to prevent UI glitches
+                    setLoading(true);
+                    
+                    // Give time for state update to finish
+                    setTimeout(() => {
+                      // Generate a completely new shuffled deck
+                      setProfileDeck(shuffle(allProfiles));
+                      // Reset the index
+                      setCurrentIndex(0);
+                      // Clear the last direction
+                      setLastDirection(undefined);
+                      // Show instructions again
+                      setShowInstructions(true);
+                      // Keep swipe history for reference
+                      // End loading state
+                      setLoading(false);
+                      console.log('Reshuffled and reset all profiles');
+                    }, 300);
+                  }}
+                >
+                  See All Profiles Again
+                </button>
+              </div>
+            ) : (
+              profileDeck.slice(currentIndex, currentIndex + 5).map((profile, i) => (
+              <TinderCard
+                key={profile.id}
+                className="swipe"
+                preventSwipe={['up', 'down']}
+                onSwipe={(dir) => swiped(dir, profile.name, currentIndex + i)}
+                onCardLeftScreen={() => outOfFrame(profile.name)}
+                swipeRequirementType="position"
+                swipeThreshold={80}
+              >
+                <div className="profile-card" style={{ zIndex: 1000 - i }}>
+                  <img src={profile.image} alt="Profile" className="profile-image" />
+                  <h2>{profile.name}</h2>
+                  <p className="major-minor">{profile.majorMinor}</p>
+                  <p className="class-year"><em>{profile.classYear}</em></p>
+
+                  <div className="bio-section">
+                    <strong>About</strong>
+                    <p className="bio-preview">{profile.bio}</p>
+                  </div>
+
+                  <div className="classes-section">
+                    <strong>Classes</strong>
+                    <p>{profile.classes}</p>
+                  </div>
+
+                  <div className="interests-section">
+                    <strong>Interests</strong>
+                    <div className="interest-tags">
+                      {profile.interests.map((tag) => (
+                        <span key={tag} className="interest-pill">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </TinderCard>
+          )))}
+          </div>
+        )}
+
+        {/* Messages tab */}
+        {activeTab === 'messages' && (
+          <div className="messages-container">
+            {rightSwipes.length === 0 ? (
+              <div className="no-messages">
+                <h3>No matches yet</h3>
+                <p>Swipe right on profiles you'd like to connect with!</p>
+                <button 
+                  className="go-swipe-button"
+                  onClick={() => handleTabChange('swipe')}
+                >
+                  Go Swipe
+                </button>
+              </div>
+            ) : (
+              <div className="chat-interface">
+                {/* Chat sidebar - list of matched users */}
+                <div className="chat-sidebar">
+                  <h3>Your Matches</h3>
+                  <div className="matches-list">
+                    {rightSwipes.map(profile => (
+                      <div 
+                        key={profile.id} 
+                        className={`match-item ${currentChat?.id === profile.id ? 'active' : ''}`}
+                        onClick={() => startChat(profile)}
+                      >
+                        <div className="match-avatar">
+                          <img src={profile.image} alt={profile.name} />
+                        </div>
+                        <div className="match-info">
+                          <div className="match-name">{profile.name}</div>
+                          <div className="match-preview">{profile.majorMinor}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Chat main area */}
+                <div className="chat-main">
+                  {!currentChat ? (
+                    <div className="select-chat">
+                      <p>Select a match to start chatting</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="chat-header">
+                        <div className="chat-recipient">
+                          <img src={currentChat.image} alt={currentChat.name} className="recipient-avatar" />
+                          <div className="recipient-info">
+                            <div className="recipient-name">{currentChat.name}</div>
+                            <div className="recipient-status">Send a message and they'll see it once they log on</div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="chat-messages">
+                        {/* First message is always the welcome */}
+                        <div className="message-bubble system">
+                          <p>You matched with {currentChat.name}! Start a conversation about your classes or study interests.</p>
+                        </div>
+                        
+                        {/* User messages */}
+                        {messages[currentChat.id]?.map(msg => (
+                          <div key={msg.id} className={`message-bubble ${msg.sender}`}>
+                            <p>{msg.text}</p>
+                            <span className="message-time">
+                              {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="chat-input">
+                        <input
+                          type="text"
+                          placeholder="Type a message..."
+                          value={messageText}
+                          onChange={(e) => setMessageText(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        />
+                        <button onClick={sendMessage}>Send</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <nav className="bottom-nav">
-        <button onClick={() => alert('TODO: Swipe view')}>🔥</button>
-        <button onClick={() => alert('TODO: Chat view')}>💬</button>
-        <button onClick={() => alert('TODO: Calendar view')}>📅</button>
-        <button onClick={() => alert('TODO: Profile view')}>👤</button>
-      </nav>
+      {/* Calendar tab content */}
+      {activeTab === 'calendar' && (
+        <div className="calendar-container">
+          <div className="placeholder-content">
+            <h3>Calendar Coming Soon</h3>
+            <p>Your study sessions and meetings will appear here</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Profile tab content */}
+      {activeTab === 'profile' && (
+        <div className="profile-container">
+          <div className="placeholder-content">
+            <h3>Your Profile</h3>
+            <p>Your profile settings and information will appear here</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

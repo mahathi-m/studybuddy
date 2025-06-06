@@ -37,7 +37,7 @@ const ProtectedRoute = ({
   
   // Redirect if onboarding complete but trying to access onboarding pages
   if (redirectIfOnboardingComplete && onboardingComplete) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/home" replace />;
   }
   
   // If all checks pass, render the protected content

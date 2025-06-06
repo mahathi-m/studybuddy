@@ -22,15 +22,70 @@
 .home-header {
   padding: 10px;
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   background-color: white;
   z-index: 10;
+  width: 100%;
+  max-width: 500px;
 }
 
-.logo {
+.home-logo {
   height: 40px;
+}
+
+/* Swipe Stats */
+.swipe-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.swipe-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.swipe-count.liked {
+  color: #e74c3c;
+}
+
+.swipe-count.passed {
+  color: #3498db;
+}
+
+.clear-history {
+  background: #f1f1f1;
+  border: none;
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 10px;
+  color: #555;
+}
+
+.clear-history:hover {
+  background: #e5e5e5;
+}
+
+/* Swipe info */
+.swipe-container {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.swipe-info {
+  margin: 10px 0;
+  font-size: 0.9rem;
+  color: #666;
 }
 
 .loading, .no-profiles, .no-more-profiles {
@@ -79,6 +134,84 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* Swipe instructions overlay */
+.swipe-instructions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.instructions-content {
+  background-color: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 450px;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.instructions-content h3 {
+  color: #2980b9;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.instruction-row {
+  display: flex;
+  justify-content: space-around;
+  margin: 20px 0;
+}
+
+.instruction-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.swipe-arrow {
+  font-size: 2rem;
+  margin-bottom: 10px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.swipe-arrow.left {
+  background-color: #f5f5f5;
+  color: #e74c3c;
+}
+
+.swipe-arrow.right {
+  background-color: #f5f5f5;
+  color: #2ecc71;
+}
+
+.got-it-button {
+  background-color: #2980b9;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.got-it-button:hover {
+  background-color: #3498db;
+}
+
 /* Tinder card deck wrapper */
 .card-deck {
   flex: 1;
@@ -95,10 +228,24 @@
 /* Each swipeable card */
 .swipe {
   position: absolute;
-  width: 90%;
-  max-width: 400px;
-  height: 70vh;
-  transition: transform 0.3s ease-out;
+  width: 100%;
+  max-width: 600px;
+  height: auto; /* Allow height to adjust to content */
+  padding: 0; /* Remove padding to allow profile-card to control padding */
+  border-radius: 12px;
+  background-color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 0 auto;
+  left: 0;
+  right: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+
+.swipe:hover {
+  transform: scale(0.97);
 }
 
 /* Add stacked card effect */
@@ -123,23 +270,33 @@
   transition: opacity 0.3s ease-out, transform 0.5s ease-out;
 }
 
-/* Card styling */
+/* Profile card */
 .profile-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 100%; /* Take up full width of parent */
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
+  max-width: 600px;
+}
+
+/* Profile content */
+.profile-content {
+  padding: 24px;
   width: 100%;
-  height: 100%;
-  background-color: white;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  box-sizing: border-box;
 }
 
 /* Profile image */
 .profile-image {
   width: 100%;
-  height: 300px;
+  height: 350px;
   object-fit: cover;
+  object-position: center;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
 }
 
 /* Name */
@@ -167,8 +324,8 @@ h2 {
 
 /* Bio, classes, interests sections */
 .bio-section, .classes-section, .interests-section {
-  padding: 10px 15px;
-  margin-top: 5px;
+  padding: 12px 18px;
+  margin-top: 8px;
 }
 
 .bio-section strong, .classes-section strong, .interests-section strong {
@@ -178,12 +335,12 @@ h2 {
 }
 
 .bio-preview {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: #555;
   margin: 0;
-  max-height: 60px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-height: none;
+  overflow-y: auto;
+  line-height: 1.4;
 }
 
 /* Tags */
@@ -250,22 +407,343 @@ h2 {
   color: #2ecc71;
 }
 
-/* Fixed bottom nav */
-.bottom-nav {
+/* Placeholder content for Calendar and Profile */
+.placeholder-content {
   display: flex;
-  justify-content: space-around;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 150px);
+  position: relative;
   width: 100%;
-  max-width: 420px;
-  padding: 12px 0;
-  border-top: 1px solid #eee;
-  position: fixed;
-  bottom: 0;
-  background-color: #fff;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 12px;
 }
 
-.bottom-nav button {
-  background: none;
-  border: none;
-  font-size: 24px;
+.placeholder-content h3 {
+  color: #2980b9;
+  margin-bottom: 10px;
+  font-size: 1.8rem;
+}
+
+.placeholder-content p {
+  color: #666;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.calendar-container,
+.profile-container {
+  width: 100%;
+  max-width: 500px;
+}
+
+/* Tabs styling */
+.tabs-container {
+  display: flex;
+  width: 100%;
+  max-width: 500px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 15px;
+  background-color: white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 14px 0;
+  font-weight: 500;
   color: #999;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.tab.active {
+  color: #2980b9;
+}
+
+.tab.active:after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #2980b9;
+  transition: all 0.3s ease;
+}
+
+/* Messages container styling */
+.messages-container {
+  width: 100%;
+  max-width: 500px;
+  height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+}
+
+.no-messages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 20px;
+}
+
+.no-messages h3 {
+  color: #2980b9;
+  margin-bottom: 10px;
+}
+
+.no-messages p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.go-swipe-button {
+  background-color: #2980b9;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 12px 24px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Chat Interface */
+.chat-interface {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Chat sidebar */
+.chat-sidebar {
+  width: 30%;
+  min-width: 120px;
+  background-color: #f8f8f8;
+  border-right: 1px solid #eee;
+  overflow-y: auto;
+}
+
+.chat-sidebar h3 {
+  padding: 15px 10px;
+  margin: 0;
+  font-size: 1rem;
+  border-bottom: 1px solid #eee;
+  color: #2980b9;
+  background-color: white;
+}
+
+.matches-list {
+  padding: 5px 0;
+}
+
+.match-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #eee;
+}
+
+.match-item:hover, .match-item.active {
+  background-color: #e8f4fc;
+}
+
+.match-item.active {
+  border-left: 3px solid #2980b9;
+}
+
+.match-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 10px;
+}
+
+.match-avatar img {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.match-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.match-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-preview {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chat main area */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+}
+
+.chat-header {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  background-color: #f8f8f8;
+}
+
+.chat-recipient {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.recipient-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
+.recipient-info {
+  flex: 1;
+}
+
+.recipient-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.recipient-status {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+/* Chat messages area - iMessage style */
+.chat-messages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  background-color: #f0f2f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-bubble {
+  max-width: 70%;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  border-radius: 18px;
+  position: relative;
+  word-break: break-word;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.message-bubble p {
+  margin: 0;
+}
+
+.message-bubble.me {
+  align-self: flex-end;
+  background-color: #0b93f6;
+  color: white;
+  border-bottom-right-radius: 5px;
+}
+
+.message-bubble.other {
+  align-self: flex-start;
+  background-color: #e5e5ea;
+  color: black;
+  border-bottom-left-radius: 5px;
+}
+
+.message-bubble.system {
+  align-self: center;
+  background-color: #f1f1f1;
+  color: #666;
+  max-width: 90%;
+  text-align: center;
+  font-size: 0.9rem;
+  border-radius: 12px;
+}
+
+.message-time {
+  font-size: 0.7rem;
+  display: block;
+  text-align: right;
+  margin-top: 3px;
+  opacity: 0.8;
+}
+
+/* Chat input area */
+.chat-input {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid #eee;
+  background-color: white;
+}
+
+.chat-input input {
+  flex: 1;
+  border: none;
+  background-color: #f1f1f1;
+  padding: 10px 15px;
+  border-radius: 20px;
+  margin-right: 10px;
+  outline: none;
+  font-size: 15px;
+}
+
+.chat-input button {
+  background-color: #0b93f6;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  width: 60px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chat-input button:hover {
+  background-color: #0a84e2;
+}
+
+.select-chat {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 1.1rem;
+  background-color: #f8f8f8;
 }

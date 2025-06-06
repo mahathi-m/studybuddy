@@ -62,9 +62,7 @@ function Home() {
     }
   };
   
-  // Development shortcuts for easier testing
-  const skipToOnboarding = () => navigate('/onboarding/name');
-  const skipToHome = () => navigate('/home');
+  // No development shortcuts in production mode
 
   return (
     <div className="App">
@@ -75,21 +73,7 @@ function Home() {
           Login with Google
         </button>
         
-        {/* Development shortcuts */}
-        <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-          <button 
-            style={{ padding: '8px 16px', background: '#f1c40f', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
-            onClick={skipToOnboarding}
-          >
-            Skip to Onboarding
-          </button>
-          <button 
-            style={{ padding: '8px 16px', background: '#2ecc71', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
-            onClick={skipToHome}
-          >
-            Skip to Home
-          </button>
-        </div>
+        {/* No development shortcuts in production */}
       </header>
     </div>
   );

@@ -101,7 +101,7 @@ export const OnboardingProvider = ({ children }) => {
       
       if (result.success) {
         // Navigate to dashboard or home
-        navigate('/dashboard');
+        navigate('/home');
       } else {
         console.error('Failed to save onboarding data:', result.error);
         // Handle error - maybe show a message to the user
