@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore"
-import { getAuth } from "firebase/auth"
+import { db, auth } from "../firebase"
+import { collection, addDoc, serverTimestamp } from "firebase/firestore"
 
 const VIOLATION_TYPES = ["No-show", "Flaky behavior", "Disrespect", "Harassment", "Spam", "Other"]
 const ACTIONS = ["Just documenting", "Warning", "Suspension", "Other"]
@@ -12,71 +12,111 @@ export default function NormViolationForm() {
   const [evidence, setEvidence] = useState("")
   const [action, setAction] = useState("")
 
-  const db = getFirestore()
-  const auth = getAuth()
-
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    let reporter = "anonymous"
-    const user = auth.currentUser
-    if (user && user.email) {
-      reporter = user.email
-    }
-
-    const report = {
-      timestamp: serverTimestamp(),
-      reportedBy: reporter,
-      violator,
-      violationType: type,
-      description,
-      evidenceUrl: evidence,
-      desiredAction: action,
+    if (!violator || !type || !description || !action) {
+      alert("Please fill out all required fields.")
+      return
     }
 
     try {
-      const reportsRef = collection(db, "normViolations")
-      await addDoc(reportsRef, report)
+      const user = auth.currentUser
+      const reporter = user?.email || "anonymous"
 
-      // reset the form 
-      setViolator("")
-      setType("")
-      setDescription("")
-      setEvidence("")
-      setAction("")
+      const report = {
+        timestamp: serverTimestamp(),
+        reportedBy: reporter,
+        violator,
+        violationType: type,
+        description,
+        evidence,
+        action,
+      }
 
-      alert("thanks for submitting a report! we will get back to you shortly.")
+      await addDoc(collection(db, "normViolations"), report)
+      alert("✅ Report submitted!")
     } catch (err) {
-      console.error("something went wrong while trying to submit the report:", err)
-      alert("oops, couldn't submit the form. try again?")
+      console.error("couldn’t send the report:", err)
+      alert(`Something went wrong: ${err.message}`)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto bg-white p-6 rounded-xl shadow-md">
-      <h2 className="text-xl font-semibold">Norm Violation Report</h2>
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col space-y-4 bg-white p-6 rounded-xl shadow-md w-full"
+    >
+      <h2 className="text-2xl font-semibold text-center mb-4">Norm Violation Report</h2>
 
-      <input value={violator} onChange={(e) => setViolator(e.target.value)} required placeholder="Violator Username" className="w-full p-2 border rounded" />
+      <div>
+        <label className="block mb-1 font-medium">Violator Name</label>
+        <input
+          value={violator}
+          onChange={(e) => setViolator(e.target.value)}
+          required
+          placeholder="Enter full name or username"
+          className="w-full p-2 border rounded"
+        />
+      </div>
 
-      <select value={type} onChange={(e) => setType(e.target.value)} required className="w-full p-2 border rounded">
-        <option value="">Select Violation Type</option>
-        {VIOLATION_TYPES.map((v) => (
-          <option key={v}>{v}</option>
-        ))}
-      </select>
+      <div>
+        <label className="block mb-1 font-medium">Type of Violation</label>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          required
+          className="w-full p-2 border rounded"
+        >
+          <option value="">Select...</option>
+          {VIOLATION_TYPES.map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+      </div>
 
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} required placeholder="What happened?" className="w-full p-2 border rounded" />
+      <div>
+        <label className="block mb-1 font-medium">What happened?</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          required
+          placeholder="Brief description of the incident"
+          className="w-full p-2 border rounded"
+        />
+      </div>
 
-      <input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="Evidence URL (optional)" className="w-full p-2 border rounded" />
+      <div>
+        <label className="block mb-1 font-medium">Evidence URL (optional)</label>
+        <input
+          value={evidence}
+          onChange={(e) => setEvidence(e.target.value)}
+          placeholder="Link to screenshots, messages, etc."
+          className="w-full p-2 border rounded"
+        />
+      </div>
 
-      <select value={action} onChange={(e) => setAction(e.target.value)} required className="w-full p-2 border rounded">
-        <option value="">Select Desired Action</option>
-        {ACTIONS.map((a) => (
-          <option key={a}>{a}</option>
-        ))}
-      </select>
+      <div>
+        <label className="block mb-1 font-medium">Suggested Action</label>
+        <select
+          value={action}
+          onChange={(e) => setAction(e.target.value)}
+          required
+          className="w-full p-2 border rounded"
+        >
+          <option value="">Select...</option>
+          {ACTIONS.map((a) => (
+            <option key={a}>{a}</option>
+          ))}
+        </select>
+      </div>
 
-      <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Submit</button>
+      <button
+        type="submit"
+        className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+      >
+        Submit Report
+      </button>
     </form>
   )
 }
