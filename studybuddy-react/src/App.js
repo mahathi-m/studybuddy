@@ -68,7 +68,7 @@ function Home() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Welcome to Study Buddy 📚</h1>
+        <h1>Welcome to SyncUp 📚</h1>
         <p>Find your perfect study match and stay accountable!</p>
         <button className="App-button" onClick={handleGoogleLogin}>
           Login with Google

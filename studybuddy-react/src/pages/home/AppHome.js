@@ -261,6 +261,14 @@ function AppHome() {
   const [currentChat, setCurrentChat] = useState(null);
   const [messageText, setMessageText] = useState('');
   const [messagesLoaded, setMessagesLoaded] = useState(false); // Track if messages have been loaded
+  
+  // Demo preprogrammed responses with sequence tracking
+  const [responseIndex, setResponseIndex] = useState({});
+  const automatedResponses = [
+    "Nice to meet you too!",
+    "I'm free to study from 3:00 to 4:00pm!",
+    "How about Coda?"
+  ];
 
   // Computed property to check if we've seen all profiles
   const allProfilesSeen = currentIndex >= profileDeck.length;
@@ -787,31 +795,31 @@ function AppHome() {
         }
       });
     } catch (error) {
-      console.error('❌ Error loading all messages:', error);
+      console.error('Error loading messages:', error);
     }
   };
   
-  // Function to send a message
+  // Function to send a message and trigger automated responses for demo purposes
   const sendMessage = async () => {
     if (!messageText.trim() || !currentChat) return;
     
     const trimmedMessage = messageText.trim();
     
-    // Clear input right away for better UX
+    // Clear the input
     setMessageText('');
     
-    // Create message ID for tracking
-    const messageId = Date.now().toString();
+    // Generate a unique message ID
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
-    // Create a new message for local state
+    // Format the user message for display
     const newMessage = {
       id: messageId,
       sender: 'me',
       text: trimmedMessage,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     };
     
-    // Add to messages state (optimistic update)
+    // Add to messages state
     setMessages(prevMessages => {
       const chatId = currentChat.id;
       const chatMessages = prevMessages[chatId] || [];
@@ -820,6 +828,41 @@ function AppHome() {
         [chatId]: [...chatMessages, newMessage]
       };
     });
+    
+    // Get the next automated response index for this chat
+    const chatId = currentChat.id;
+    const currentResponseIdx = responseIndex[chatId] || 0;
+    
+    // Only if we have more automated responses available
+    if (currentResponseIdx < automatedResponses.length) {
+      // Schedule the automated response with a 3-second delay
+      setTimeout(() => {
+        const responseText = automatedResponses[currentResponseIdx];
+        const responseId = `resp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        
+        // Add the automated response to the chat
+        const automatedResponse = {
+          id: responseId,
+          sender: 'other',
+          text: responseText,
+          timestamp: new Date().toISOString()
+        };
+        
+        setMessages(prevMessages => {
+          const chatMessages = prevMessages[chatId] || [];
+          return {
+            ...prevMessages,
+            [chatId]: [...chatMessages, automatedResponse]
+          };
+        });
+        
+        // Update the response index for next time
+        setResponseIndex(prev => ({
+          ...prev,
+          [chatId]: currentResponseIdx + 1
+        }));
+      }, 3000); // 3-second delay
+    }
     
     try {
       // Save message to Firebase if user is authenticated
@@ -875,6 +918,7 @@ function AppHome() {
       console.error('Failed to send message. Please try again.');
     }
   };
+  
   
   // Function to start a new chat and load previous messages
   const startChat = async (profile) => {
