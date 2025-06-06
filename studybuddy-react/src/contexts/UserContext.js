@@ -62,16 +62,35 @@ export const UserProvider = ({ children }) => {
   const refreshUserData = async () => {
     if (currentUser) {
       try {
+        console.log('Refreshing user data for:', currentUser.uid);
         const result = await getUserData(currentUser.uid);
         if (result.success) {
+          console.log('User data refreshed:', result.data);
           setUserData(result.data);
+          
+          // Explicitly check and update onboarding status
+          if (result.data && result.data.onboardingComplete) {
+            console.log('Setting onboardingComplete to true');
+            setOnboardingComplete(true);
+          }
+          
           return result.data;
+        } else {
+          console.log('Failed to refresh user data:', result.error);
         }
       } catch (error) {
         console.error('Error refreshing user data:', error);
       }
+    } else {
+      console.log('No current user, cannot refresh data');
     }
     return null;
+  };
+  
+  // Manual method to force update onboarding status
+  const forceUpdateOnboardingStatus = (status) => {
+    console.log(`Manually setting onboarding status to: ${status}`);
+    setOnboardingComplete(status);
   };
 
   // Value object to be provided to consumers
@@ -81,7 +100,8 @@ export const UserProvider = ({ children }) => {
     loading,
     onboardingComplete,
     refreshUserData,
-    setUserData
+    setUserData,
+    forceUpdateOnboardingStatus
   };
   
   return (

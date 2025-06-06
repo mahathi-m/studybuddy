@@ -10,7 +10,7 @@ function OnboardingHouseRules() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { refreshUserData } = useUser();
+  const { refreshUserData, forceUpdateOnboardingStatus } = useUser();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -84,13 +84,22 @@ function OnboardingHouseRules() {
         
         console.log('Profile created successfully');
         
-        // Refresh user data to update the onboardingComplete flag in context
+        // Force update the onboarding status immediately
+        forceUpdateOnboardingStatus(true);
+        
+        // Also refresh user data as a backup
         console.log('Refreshing user data before navigating...');
         await refreshUserData();
         
+        console.log('Manually setting localStorage flag for onboarding...');
+        localStorage.setItem('onboardingCompleted', 'true');
+        
+        // Add a small delay to ensure context updates are processed
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Navigate to the home page using absolute path
         console.log('User data refreshed, navigating to home');
-        navigate('/home');
+        navigate('/home', { replace: true });
       } else {
         throw new Error(result.error || 'Failed to save data');
       }

@@ -18,7 +18,25 @@ const ProtectedRoute = ({
   requireOnboarding = false,
   redirectIfOnboardingComplete = false
 }) => {
-  const { currentUser, loading, onboardingComplete } = useUser();
+  const { currentUser, loading, onboardingComplete, forceUpdateOnboardingStatus } = useUser();
+  
+  // Also check localStorage for onboarding status
+  const localStorageOnboardingComplete = localStorage.getItem('onboardingCompleted') === 'true';
+  
+  // Combine context and localStorage values
+  const isOnboardingComplete = onboardingComplete || localStorageOnboardingComplete;
+  
+  // If localStorage shows onboarding is complete but context doesn't, update context
+  React.useEffect(() => {
+    if (localStorageOnboardingComplete && !onboardingComplete && forceUpdateOnboardingStatus) {
+      console.log('Syncing onboarding status from localStorage to context');
+      forceUpdateOnboardingStatus(true);
+    }
+  }, [localStorageOnboardingComplete, onboardingComplete, forceUpdateOnboardingStatus]);
+  
+  console.log('ProtectedRoute check - Context onboardingComplete:', onboardingComplete);
+  console.log('ProtectedRoute check - localStorage onboardingComplete:', localStorageOnboardingComplete);
+  console.log('ProtectedRoute check - Combined isOnboardingComplete:', isOnboardingComplete);
   
   // Show loading state while auth state is being determined
   if (loading) {
@@ -31,12 +49,12 @@ const ProtectedRoute = ({
   }
   
   // Check onboarding status requirements
-  if (requireOnboarding && !onboardingComplete) {
+  if (requireOnboarding && !isOnboardingComplete) {
     return <Navigate to="/onboarding/name" replace />;
   }
   
   // Redirect if onboarding complete but trying to access onboarding pages
-  if (redirectIfOnboardingComplete && onboardingComplete) {
+  if (redirectIfOnboardingComplete && isOnboardingComplete) {
     return <Navigate to="/home" replace />;
   }
   
