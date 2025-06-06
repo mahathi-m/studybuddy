@@ -22,7 +22,10 @@ import OnboardingHouseRules from './pages/onboarding/12_OnboardingHouseRules';
 import AppHome from './pages/home/AppHome';
 import Calendar from './pages/calendar/Calendar';
 import NormViolationForm from "./components/NormViolationForm";
-import NormViolationModal from "./components/NormViolationPopup";
+import Report from "./components/ReportPage";
+
+
+
 
 
 function Home() {
@@ -166,6 +169,7 @@ function App() {
         } />
 
         <Route path="/safety" element={<NormViolationForm />} /> {/* connecting norm violation report */}
+        <Route path="/safety" element={<Report />} />
 
       </Routes>
     </AppProviders>

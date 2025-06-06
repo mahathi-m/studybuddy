@@ -10,7 +10,7 @@ import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc
 
 // Import profile migration utilities
 import { migrateProfilesToFirebase, getAllProfilesFromFirebase, checkProfilesMigrated } from '../../utils/profileMigration';
-import NormViolationModal from "../../components/NormViolationPopup";
+
 
 
 // Current user (demo)
@@ -1405,7 +1405,7 @@ function AppHome() {
               <button
                 className="logout-button"
                 style={{ backgroundColor: "#e53e3e", marginLeft: "0.5rem" }}
-                onClick={() => setShowSafetyModal(true)}
+                onClick={() => navigate("/safety")}
               >
                 Safety
               </button>
@@ -1415,10 +1415,6 @@ function AppHome() {
           </div>
         </div>
       )}
-      <NormViolationModal
-        isOpen={showSafetyModal}
-        onClose={() => setShowSafetyModal(false)}
-      />
 
     </div>
     
