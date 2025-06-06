@@ -4,7 +4,10 @@ import '../../styles/AppHome.css';
 
 import logo from '../../assets/logo.png';
 import { db, auth } from '../../firebase';
-import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc, orderBy, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, addDoc, orderBy, writeBatch, getDoc } from 'firebase/firestore';
+
+// Import profile migration utilities
+import { migrateProfilesToFirebase, getAllProfilesFromFirebase, checkProfilesMigrated } from '../../utils/profileMigration';
 
 // Master list of profiles
 const allProfiles = [
@@ -210,11 +213,12 @@ function shuffle(array) {
 }
 
 function AppHome() {
-  // Use two pieces of state: current profile index and the full shuffled deck
-  const [profileDeck, setProfileDeck] = useState(() => shuffle(allProfiles));
+  // Use Firebase to get profiles instead of hardcoded ones
+  const [profileDeck, setProfileDeck] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [lastDirection, setLastDirection] = useState();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading state
+  const [migrationStatus, setMigrationStatus] = useState({ status: 'pending', message: null });
   
   // Track who was swiped left/right
   const [rightSwipes, setRightSwipes] = useState([]);
@@ -330,27 +334,109 @@ function AppHome() {
   const activeProfiles = profileDeck.slice(currentIndex, currentIndex + 5);
 
   // Reset function with loading state to avoid UI glitches
-  const resetProfiles = () => {
+  const resetProfiles = async () => {
     // Set loading state to prevent UI flicker
     setLoading(true);
     
-    // Give time for state update to finish
-    setTimeout(() => {
-      // Generate a completely new shuffled deck
-      setProfileDeck(shuffle(allProfiles));
-      // Reset the index
-      setCurrentIndex(0);
-      // Clear the last direction
-      setLastDirection(undefined);
-      // Show instructions again
-      setShowInstructions(true);
-      // Keep swipe history for reference, but show an option to clear it
+    try {
+      // Fetch profiles from Firebase
+      const result = await getAllProfilesFromFirebase();
+      
+      if (result.success) {
+        // Generate a completely new shuffled deck
+        setProfileDeck(shuffle(result.profiles));
+        // Reset the index
+        setCurrentIndex(0);
+        // Clear the last direction
+        setLastDirection(undefined);
+        // Show instructions again
+        setShowInstructions(true);
+        console.log('Reshuffled and reset all profiles from Firebase');
+      } else {
+        console.error('Failed to reset profiles:', result.error);
+      }
+    } catch (error) {
+      console.error('Error resetting profiles:', error);
+    } finally {
       // End loading state
       setLoading(false);
-      console.log('Reshuffled and reset all profiles');
-    }, 300);
+    }
   };
   
+  // Migrate hardcoded profiles to Firebase if needed
+  const migrateProfiles = async () => {
+    try {
+      setMigrationStatus({ status: 'migrating', message: 'Migrating profiles to Firebase...' });
+      
+      // Check if profiles have already been migrated
+      const checkResult = await checkProfilesMigrated();
+      
+      if (checkResult.migrated) {
+        console.log(`Found ${checkResult.count} already migrated profiles, skipping migration`);
+        setMigrationStatus({ status: 'completed', message: `Found ${checkResult.count} already migrated profiles` });
+        return true;
+      }
+      
+      // If not migrated, perform migration
+      const result = await migrateProfilesToFirebase(allProfiles);
+      
+      if (result.success) {
+        console.log(`Successfully migrated ${result.migrated} profiles to Firebase`);
+        setMigrationStatus({ 
+          status: 'completed', 
+          message: `Successfully migrated ${result.migrated} profiles to Firebase` 
+        });
+        return true;
+      } else {
+        console.error('Failed to migrate profiles:', result.error);
+        setMigrationStatus({ 
+          status: 'failed', 
+          message: `Failed to migrate profiles: ${result.error}` 
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Error migrating profiles:', error);
+      setMigrationStatus({ 
+        status: 'failed', 
+        message: `Error migrating profiles: ${error.message}` 
+      });
+      return false;
+    }
+  };
+  
+  // Load profiles from Firebase when component mounts
+  useEffect(() => {
+    const loadProfiles = async () => {
+      setLoading(true);
+      
+      try {
+        // First, ensure profiles are migrated
+        await migrateProfiles();
+        
+        // Then load profiles from Firebase
+        const result = await getAllProfilesFromFirebase();
+        
+        if (result.success && result.profiles.length > 0) {
+          setProfileDeck(shuffle(result.profiles));
+          console.log(`Loaded ${result.profiles.length} profiles from Firebase`);
+        } else {
+          console.warn('No profiles found in Firebase, falling back to hardcoded profiles');
+          // Fallback to hardcoded profiles in case of error
+          setProfileDeck(shuffle(allProfiles));
+        }
+      } catch (error) {
+        console.error('Error loading profiles:', error);
+        // Fallback to hardcoded profiles in case of error
+        setProfileDeck(shuffle(allProfiles));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadProfiles();
+  }, []);
+
   // Load swipe history from Firebase when component mounts or auth state changes
   useEffect(() => {
     const loadSwipeHistory = async () => {
@@ -591,104 +677,73 @@ function AppHome() {
       // Get the current user ID
       const currentUserId = auth.currentUser.uid;
       
-      // Try two queries - one for participants field, one for senderId/receiverId as fallback
-      // First query: using participants field (new messages format)
+      // Query for messages using participants field (most reliable method)
       const participantsQuery = query(
         collection(db, 'messages'),
         where('participants', 'array-contains', currentUserId)
       );
       
-      // Second query: messages sent by current user (older format)
-      const sentQuery = query(
-        collection(db, 'messages'),
-        where('senderId', '==', currentUserId)
-      );
+      // Execute query
+      const messagesSnapshot = await getDocs(participantsQuery);
       
-      // Third query: messages received by current user (older format)
-      const receivedQuery = query(
-        collection(db, 'messages'),
-        where('receiverId', '==', currentUserId)
-      );
-      
-      // Execute all three queries
-      const [participantsSnapshot, sentSnapshot, receivedSnapshot] = await Promise.all([
-        getDocs(participantsQuery),
-        getDocs(sentQuery),
-        getDocs(receivedQuery)
-      ]);
-      
-      console.log(`Found ${participantsSnapshot.size} messages with participants field`);
-      console.log(`Found ${sentSnapshot.size} sent messages`);
-      console.log(`Found ${receivedSnapshot.size} received messages`);
+      console.log(`Found ${messagesSnapshot.size} messages for current user`);
       
       // Create a messages map to avoid duplicates (using document ID as key)
       const messagesMap = {};
       
-      // Process messages from all three queries
-      const processSnapshot = (snapshot) => {
-        snapshot.forEach((doc) => {
-          // Skip if we already processed this message
-          if (messagesMap[doc.id]) return;
-          
-          const data = doc.data();
-          const messageData = {
-            id: doc.id,
-            docData: data,  // Store full data for debugging
-            senderId: data.senderId,
-            receiverId: data.receiverId,
-            text: data.text,
-            timestamp: data.timestamp?.toDate()?.toISOString() || data.clientTimestamp || new Date().toISOString(),
-            profileInfo: data.profileInfo || null, // Store profile info if available
-          };
-          
-          messagesMap[doc.id] = messageData;
-        });
-      };
+      // Process messages
+      messagesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        // Skip messages without text
+        if (!data.text) {
+          console.warn('⚠️ Skipping message without text content:', doc.id);
+          return;
+        }
+        
+        // Store message data with all relevant information
+        messagesMap[doc.id] = {
+          id: doc.id,
+          senderId: data.senderId,
+          receiverId: data.receiverId,
+          text: data.text,
+          conversationId: data.conversationId,
+          timestamp: data.timestamp?.toDate()?.toISOString() || data.clientTimestamp || new Date().toISOString(),
+          profileInfo: data.profileInfo || null, // Profile info is now consistently stored
+        };
+      });
       
-      // Process all snapshots
-      processSnapshot(participantsSnapshot);
-      processSnapshot(sentSnapshot);
-      processSnapshot(receivedSnapshot);
-      
-      console.log(`Total unique messages found: ${Object.keys(messagesMap).length}`);
+      console.log(`Processed ${Object.keys(messagesMap).length} unique messages`);
       
       // Group messages by conversation
       const messagesByConversation = {};
       
-      // Process each message and organize by conversation
+      // Process each message and organize by profile ID
       Object.values(messagesMap).forEach((messageData) => {
+        // Find the other participant in the conversation
         const otherId = messageData.senderId === currentUserId ? messageData.receiverId : messageData.senderId;
         
         // Skip if missing critical data
-        if (!otherId || !messageData.text) {
-          console.warn('⚠️ Skipping message with missing data:', messageData);
+        if (!otherId) {
+          console.warn('⚠️ Skipping message with missing participant ID:', messageData);
           return;
         }
         
-        // Extract the actual profile ID from the prefixed format (profile_ID)
-        // For the UI, we need the original ID without the prefix
-        let chatId = otherId;
+        // Use the profileInfo.id if available (most reliable), otherwise fall back to the otherId
+        let chatId = messageData.profileInfo?.id || otherId;
         
-        // Handle the new prefixed profile IDs
-        // If it's a profile ID (starts with "profile_"), extract the actual ID
-        if (otherId.startsWith('profile_')) {
-          const actualProfileId = otherId.substring(8); // Remove 'profile_' prefix
-          chatId = actualProfileId; // Use the actual profile ID for UI mapping
-          console.log(`Converting ${otherId} to ${chatId} for UI display`);
-        }
-        
-        // Initialize array if it doesn't exist
+        // For UI consistency, create an entry using the profile's Firebase ID
         if (!messagesByConversation[chatId]) {
           messagesByConversation[chatId] = [];
         }
         
-        // Add to conversation array with enhanced metadata
+        // Add formatted message to the conversation
         messagesByConversation[chatId].push({
           id: messageData.id,
           sender: messageData.senderId === currentUserId ? 'me' : 'other',
           text: messageData.text,
           timestamp: messageData.timestamp,
-          profileInfo: messageData.profileInfo // Include profile info if available
+          profileInfo: messageData.profileInfo // Include profile info for UI
         });
       });
       
@@ -710,7 +765,7 @@ function AppHome() {
         if (msgs.length > 0) {
           console.log(`- First message: ${msgs[0].text.substring(0, 20)}... (from ${msgs[0].sender})`);
           if (msgs[0].profileInfo) {
-            console.log(`  Profile info available: ${msgs[0].profileInfo.name}`);
+            console.log(`  Profile info: ${msgs[0].profileInfo.name}`);
           }
         }
       });
@@ -752,13 +807,11 @@ function AppHome() {
     try {
       // Save message to Firebase if user is authenticated
       if (auth.currentUser) {
-        // IMPORTANT: We need to handle the fact that profile IDs are not Firebase user IDs
-        // Firebase needs real IDs, so we'll create a stable ID for hardcoded profiles
         const userId = auth.currentUser.uid;
         
-        // For hardcoded profiles, create a stable ID based on the profile name
-        // This ensures we always reference the same ID for the same profile
-        const profileId = `profile_${currentChat.id}`;
+        // Use the profile's Firebase ID directly
+        // The ID should already be in Firebase format
+        const profileId = currentChat.id;
         
         console.log(`💬 Sending message to ${currentChat.name} with profileId: ${profileId}`);
         
@@ -767,11 +820,11 @@ function AppHome() {
         
         // Full profile information to store with the message
         const profileInfo = {
-          id: currentChat.id,
+          id: profileId,
           name: currentChat.name,
           majorMinor: currentChat.majorMinor || '',
           classYear: currentChat.classYear || '',
-          image: currentChat.image || ''
+          image: currentChat.photoURL || currentChat.image || ''
         };
         
         // Save message to Firestore
@@ -835,111 +888,65 @@ function AppHome() {
         // Get the current user ID
         const userId = auth.currentUser.uid;
         
-        // For profile, we need to use the prefixed ID format when querying Firebase
-        const originalProfileId = profile.id;
-        const profileId = `profile_${originalProfileId}`; // Use prefixed profile ID for Firebase queries
+        // Use the profile's Firebase ID directly (no prefix needed now)
+        const profileId = profile.id;
         
         console.log(`Using Firebase profile ID: ${profileId} for profile: ${profile.name}`);
         
-        // Create a conversation ID that includes the prefixed profile ID
+        // Create a conversation ID using the profile's Firebase ID
         const conversationId = `${userId}_${profileId}`;
         
         console.log(`Conversation ID for chat with ${profile.name}: ${conversationId}`);
         
-        // Find messages by the conversationId
-        const conversationQuery = query(
+        // Find messages by participants array (most reliable)
+        const participantsQuery = query(
           collection(db, 'messages'),
-          where('conversationId', '==', conversationId),
-          orderBy('timestamp', 'asc')
+          where('participants', 'array-contains', userId)
         );
         
-        // Specific sender-receiver queries (fallback)
-        // Since we're now using prefixed profile IDs, these should match our current format
-        const sentQuery = query(
-          collection(db, 'messages'),
-          where('senderId', '==', userId),
-          where('receiverId', '==', profileId)
-        );
+        const participantsSnapshot = await getDocs(participantsQuery);
         
-        const receivedQuery = query(
-          collection(db, 'messages'),
-          where('senderId', '==', profileId),
-          where('receiverId', '==', userId)
-        );
-        
-        // Execute all queries
-        const [conversationSnapshot, sentSnapshot, receivedSnapshot] = await Promise.all([
-          getDocs(conversationQuery),
-          getDocs(sentQuery),
-          getDocs(receivedQuery)
-        ]);
-        
-        console.log(`Found ${conversationSnapshot.size} messages by conversationId`);
-        console.log(`Found ${sentSnapshot.size} sent messages by direct userId/profileId`);
-        console.log(`Found ${receivedSnapshot.size} received messages by direct userId/profileId`);
-        
-        // Check for legacy messages with non-prefixed profile IDs
-        if (conversationSnapshot.size === 0 && sentSnapshot.size === 0 && receivedSnapshot.size === 0) {
-          console.log('No messages found with new format, trying legacy format...');
-          
-          // Try old format conversationId (non-prefixed)
-          const legacyIds = [userId, originalProfileId].sort();
-          const legacyConversationId = `${legacyIds[0]}_${legacyIds[1]}`;
-          
-          // Query with legacy format
-          const legacyQuery = query(
-            collection(db, 'messages'),
-            where('conversationId', '==', legacyConversationId)
-          );
-          
-          const legacySnapshot = await getDocs(legacyQuery);
-          console.log(`Found ${legacySnapshot.size} legacy messages`);
-          
-          // If legacy messages exist, migrate them to new format
-          if (legacySnapshot.size > 0) {
-            console.log('Migrating legacy messages to new format...');
-            // We'd handle migration here if needed
-          }
-        }
+        console.log(`Found ${participantsSnapshot.size} total messages for current user`);
         
         // Track processed messages to avoid duplicates
         const processedMessageIds = new Set();
         const loadedMessages = [];
         
-        // Process all messages from the three queries
-        const processMessages = (snapshot, source) => {
-          snapshot.forEach(doc => {
-            // Skip if already processed
-            if (processedMessageIds.has(doc.id)) return;
-            
-            const data = doc.data();
-            if (!data.text) {
-              console.warn(`Skipping message without text: ${doc.id}`);
-              return;
-            }
-            
-            processedMessageIds.add(doc.id);
-            
-            // Extract profile info if available
-            const profileInfo = data.profileInfo || null;
-            
-            loadedMessages.push({
-              id: doc.id,
-              sender: data.senderId === userId ? 'me' : 'other',
-              text: data.text,
-              timestamp: data.timestamp?.toDate()?.toISOString() || 
-                      data.clientTimestamp || 
-                      new Date().toISOString(),
-              source: source, // For debugging
-              profileInfo: profileInfo // Include profile info
-            });
+        // Process messages for this specific chat
+        participantsSnapshot.forEach(doc => {
+          const data = doc.data();
+          
+          // Skip if already processed
+          if (processedMessageIds.has(doc.id)) return;
+          
+          // Only include messages for this specific conversation
+          // Check if the other participant is the profile we're looking for
+          const otherParticipant = data.participants?.find(p => p !== userId);
+          
+          // Skip if not related to current profile
+          if (otherParticipant !== profileId) return;
+          
+          // Skip if missing text
+          if (!data.text) {
+            console.warn(`Skipping message without text: ${doc.id}`);
+            return;
+          }
+          
+          processedMessageIds.add(doc.id);
+          
+          // Extract profile info if available
+          const profileInfo = data.profileInfo || null;
+          
+          loadedMessages.push({
+            id: doc.id,
+            sender: data.senderId === userId ? 'me' : 'other',
+            text: data.text,
+            timestamp: data.timestamp?.toDate()?.toISOString() || 
+                    data.clientTimestamp || 
+                    new Date().toISOString(),
+            profileInfo: profileInfo // Include profile info
           });
-        };
-        
-        // Process messages from all three queries
-        processMessages(conversationSnapshot, 'conversationId');
-        processMessages(sentSnapshot, 'sent');
-        processMessages(receivedSnapshot, 'received');
+        });
         
         // Sort messages by timestamp
         loadedMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -956,7 +963,7 @@ function AppHome() {
         }
       }
     } catch (error) {
-      console.error('❌ Error loading messages from Firebase:', error);
+      console.error('❌ Error loading messages for chat:', error);
     }
   };
 
