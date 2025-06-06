@@ -33,15 +33,50 @@
   height: 40px;
 }
 
-.loading, .no-profiles {
+.loading, .no-profiles, .no-more-profiles {
   flex: 1;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   font-size: 1.2rem;
   color: #666;
   text-align: center;
   padding: 20px;
+  height: 70vh;
+  width: 90%;
+  max-width: 400px;
+}
+
+.no-more-profiles h3 {
+  color: #2980b9;
+  margin-bottom: 10px;
+  font-size: 1.8rem;
+}
+
+.no-more-profiles p {
+  color: #555;
+  font-size: 1rem;
+  margin-bottom: 20px;
+}
+
+.restart-button {
+  background-color: #2980b9;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.restart-button:hover {
+  background-color: #3498db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* Tinder card deck wrapper */
@@ -51,7 +86,10 @@
   justify-content: center;
   align-items: center;
   padding: 20px;
-  overflow: hidden;
+  overflow: visible;
+  width: 100%;
+  height: 70vh;
+  position: relative;
 }
 
 /* Each swipeable card */
@@ -60,6 +98,29 @@
   width: 90%;
   max-width: 400px;
   height: 70vh;
+  transition: transform 0.3s ease-out;
+}
+
+/* Add stacked card effect */
+.swipe:nth-child(1) {
+  z-index: 3;
+  transform: scale(1) translateY(0);
+}
+
+.swipe:nth-child(2) {
+  z-index: 2;
+  transform: scale(0.97) translateY(10px);
+}
+
+.swipe:nth-child(3) {
+  z-index: 1;
+  transform: scale(0.94) translateY(20px);
+}
+
+/* Styling for swiped cards */
+.swipe.swiped {
+  opacity: 0;
+  transition: opacity 0.3s ease-out, transform 0.5s ease-out;
 }
 
 /* Card styling */

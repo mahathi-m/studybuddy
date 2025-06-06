@@ -3,7 +3,6 @@ import TinderCard from 'react-tinder-card';
 import '../../styles/AppHome.css';
 
 import logo from '../../assets/logo.png';
-import defaultProfile from '../../assets/default-profile.png';
 
 // Master list of profiles
 const allProfiles = [
@@ -99,7 +98,7 @@ const allProfiles = [
   },
   {
     name: 'Dalia Ovadia',
-    image: defaultProfile,
+    image: require('../../assets/Dalia Ovadia.webp'),
     majorMinor: 'EE & Computer Science',
     classYear: 'Class of 2028',
     bio: `I'm considering EE as a potential major but also interested in CS and math. If anyone wants to study for the 51 final lmk!!`,
@@ -162,7 +161,7 @@ const allProfiles = [
   },
   {
     name: 'Ben O\'Keefe',
-    image: defaultProfile, // Using default profile image instead due to filename issue
+    image: require('../../assets/Ben OKeefe.jpeg'),
     majorMinor: 'Computer Science',
     classYear: 'Class of 2026',
     bio: `CS Major trying to get through the quarter. Typically study in quiet locations with earbuds. Happy to review notes and quiz for exams.`,
@@ -198,22 +197,27 @@ const shuffle = (arr) => {
 
 function AppHome() {
   const [profileQueue, setProfileQueue] = useState(shuffle(allProfiles));
-  const [currentProfile, setCurrentProfile] = useState(profileQueue[0]);
 
-  const handleSwipe = () => {
+  // Keep track of which cards have been swiped
+  const [swiped, setSwiped] = useState([]);
+
+  const outOfFrame = (name) => {
+    console.log(`${name} left the screen!`);
+  };
+
+  const handleSwipe = (direction, index) => {
+    console.log(`Swiped ${direction} on ${profileQueue[index]?.name || 'profile'}`);    
+    setSwiped((prevSwiped) => [...prevSwiped, index]);
+    
+    // Wait a moment before updating the queue to allow the animation to complete
     setTimeout(() => {
-      const nextQueue = [...profileQueue];
-      nextQueue.shift();
-
-      if (nextQueue.length === 0) {
-        const reshuffled = shuffle(allProfiles);
-        setProfileQueue(reshuffled);
-        setCurrentProfile(reshuffled[0]);
-      } else {
-        setProfileQueue(nextQueue);
-        setCurrentProfile(nextQueue[0]);
-      }
-    }, 150);
+      setProfileQueue((prevQueue) => {
+        const newQueue = [...prevQueue];
+        newQueue.splice(index, 1); // Remove the swiped card
+        return newQueue;
+      });
+      setSwiped([]); // Reset swiped cards
+    }, 300);
   };
 
   return (
@@ -223,38 +227,55 @@ function AppHome() {
       </div>
 
       <div className="card-deck">
-        <TinderCard
-          key={currentProfile.id}
-          className="swipe"
-          preventSwipe={['up', 'down']}
-          onCardLeftScreen={handleSwipe}
-        >
-          <div className="profile-card">
-            <img src={currentProfile.image} alt="Profile" className="profile-image" />
-            <h2>{currentProfile.name}</h2>
-            <p className="major-minor">{currentProfile.majorMinor}</p>
-            <p className="class-year"><em>{currentProfile.classYear}</em></p>
+        {profileQueue.length === 0 ? (
+          <div className="no-more-profiles">
+            <h3>No more profiles</h3>
+            <p>You've seen all available study buddies!</p>
+            <button 
+              className="restart-button"
+              onClick={() => setProfileQueue(shuffle(allProfiles))}
+            >
+              See All Profiles Again
+            </button>
+          </div>
+        ) : (
+          profileQueue.slice(0, 3).map((profile, index) => (
+          <TinderCard
+            key={profile.id || index}
+            className={`swipe ${swiped.includes(index) ? 'swiped' : ''}`}
+            preventSwipe={['up', 'down']}
+            onSwipe={(dir) => handleSwipe(dir, index)}
+            onCardLeftScreen={() => outOfFrame(profile.name)}
+            swipeRequirementType="position"
+            swipeThreshold={80}
+          >
+            <div className="profile-card" style={{ zIndex: 1000 - index }}>
+              <img src={profile.image} alt="Profile" className="profile-image" />
+              <h2>{profile.name}</h2>
+              <p className="major-minor">{profile.majorMinor}</p>
+              <p className="class-year"><em>{profile.classYear}</em></p>
 
-            <div className="bio-section">
-              <strong>About</strong>
-              <p className="bio-preview">{currentProfile.bio}</p>
-            </div>
+              <div className="bio-section">
+                <strong>About</strong>
+                <p className="bio-preview">{profile.bio}</p>
+              </div>
 
-            <div className="classes-section">
-              <strong>Classes</strong>
-              <p>{currentProfile.classes}</p>
-            </div>
+              <div className="classes-section">
+                <strong>Classes</strong>
+                <p>{profile.classes}</p>
+              </div>
 
-            <div className="interests-section">
-              <strong>Interests</strong>
-              <div className="interest-tags">
-                {currentProfile.interests.map((tag) => (
-                  <span key={tag} className="interest-pill">{tag}</span>
-                ))}
+              <div className="interests-section">
+                <strong>Interests</strong>
+                <div className="interest-tags">
+                  {profile.interests.map((tag) => (
+                    <span key={tag} className="interest-pill">{tag}</span>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </TinderCard>
+          </TinderCard>
+        )))}
       </div>
 
       <nav className="bottom-nav">

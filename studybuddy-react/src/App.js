@@ -1,9 +1,11 @@
 import React from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { signInWithPopup } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, provider } from './firebase';
+import { auth, provider } from './firebase';
 import './App.css';
+import ProtectedRoute from './components/ProtectedRoute';
+import AppProviders from './contexts/AppProviders';
+import { useUser } from './contexts/UserContext';
 
 import OnboardingName from './pages/onboarding/01_OnboardingName';
 import OnboardingGender from './pages/onboarding/02_OnboardingGender';
@@ -21,12 +23,48 @@ import AppHome from './pages/home/AppHome';
 
 function Home() {
   const navigate = useNavigate();
+  const { currentUser, onboardingComplete, loading } = useUser();
+  
+  // Redirect user based on auth and onboarding status when component mounts
+  React.useEffect(() => {
+    // Don't redirect while still loading
+    if (loading) return;
+    
+    if (currentUser) {
+      console.log('User is authenticated:', currentUser.uid);
+      console.log('Onboarding status:', onboardingComplete);
+      
+      // If onboarding is complete, redirect to home
+      if (onboardingComplete) {
+        console.log('Redirecting to home page');
+        navigate('/home');
+      } else {
+        console.log('Redirecting to onboarding');
+        navigate('/onboarding/name');
+      }
+    } else {
+      // User is not authenticated, stay on the welcome page
+      console.log('No user is authenticated, showing welcome page');
+    }
+  }, [currentUser, onboardingComplete, loading, navigate]);
 
-  const handleGoogleLogin = () => {
-    // Skip authentication and directly navigate to home
-    console.log('Navigating to home');
-    navigate('/home');
+  const handleGoogleLogin = async () => {
+    try {
+      console.log('Starting Google login process');
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      console.log('User signed in:', user.uid);
+      
+      // User context will handle the redirection based on onboarding status
+      // (The useEffect above will run after the auth state updates)
+    } catch (error) {
+      console.error("Error during authentication:", error);
+    }
   };
+  
+  // Development shortcuts for easier testing
+  const skipToOnboarding = () => navigate('/onboarding/name');
+  const skipToHome = () => navigate('/home');
 
   return (
     <div className="App">
@@ -34,8 +72,24 @@ function Home() {
         <h1>Welcome to Study Buddy 📚</h1>
         <p>Find your perfect study match and stay accountable!</p>
         <button className="App-button" onClick={handleGoogleLogin}>
-          Create Profile
+          Login with Google
         </button>
+        
+        {/* Development shortcuts */}
+        <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+          <button 
+            style={{ padding: '8px 16px', background: '#f1c40f', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
+            onClick={skipToOnboarding}
+          >
+            Skip to Onboarding
+          </button>
+          <button 
+            style={{ padding: '8px 16px', background: '#2ecc71', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
+            onClick={skipToHome}
+          >
+            Skip to Home
+          </button>
+        </div>
       </header>
     </div>
   );
@@ -43,22 +97,80 @@ function Home() {
 
 function App() {
   return (
+    <AppProviders>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/onboarding/name" element={<OnboardingName />} />
-        <Route path="/onboarding/gender" element={<OnboardingGender />} />
-        <Route path="/onboarding/gradyear" element={<OnboardingGradYear />} />
-        <Route path="/onboarding/majorminor" element={<OnboardingMajorMinor />} />
-        <Route path="/onboarding/interests" element={<OnboardingInterests />} />
-        <Route path="/onboarding/classes" element={<OnboardingClasses />} />
-        <Route path="/onboarding/helptype" element={<OnboardingHelpType />} />
-        <Route path="/onboarding/connection" element={<OnboardingConnectionType />} />
-        <Route path="/onboarding/workstyle" element={<OnboardingWorkStyle />} />
-        <Route path="/onboarding/photo" element={<OnboardingPhoto />} />
-        <Route path="/onboarding/bio" element={<OnboardingBio />} />
-        <Route path="/onboarding/houserules" element={<OnboardingHouseRules />} />
-        <Route path="/home" element={<AppHome />} />
+        
+        {/* Onboarding Routes - require auth but redirect if onboarding is already complete */}
+        <Route path="/onboarding/name" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingName />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/gender" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingGender />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/gradyear" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingGradYear />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/majorminor" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingMajorMinor />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/interests" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingInterests />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/classes" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingClasses />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/helptype" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingHelpType />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/connection" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingConnectionType />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/workstyle" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingWorkStyle />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/photo" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingPhoto />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/bio" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingBio />
+          </ProtectedRoute>
+        } />
+        <Route path="/onboarding/houserules" element={
+          <ProtectedRoute requireAuth={true} redirectIfOnboardingComplete={true}>
+            <OnboardingHouseRules />
+          </ProtectedRoute>
+        } />
+        
+        {/* Home route - requires auth and completed onboarding */}
+        <Route path="/home" element={
+          <ProtectedRoute requireAuth={true} requireOnboarding={true}>
+            <AppHome />
+          </ProtectedRoute>
+        } />
       </Routes>
+    </AppProviders>
   );
 }
 
