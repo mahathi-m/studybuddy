@@ -203,39 +203,68 @@ export const checkOnboardingStatus = async (userId) => {
  */
 export const getPotentialMatches = async (userId) => {
   try {
-    console.log('Getting potential matches for user:', userId);
-    // Get all users except the current user
-    const usersSnapshot = await getDocs(collection(db, 'users'));
-    const users = [];
-    const allUsers = [];
+    console.log('Getting potential matches for user:', userId)
+
+    // retrieve all users 
+    const usersSnapshot = await getDocs(collection(db, 'users'))
+    const allUsers = []
+
+    let currentUserData = null
 
     usersSnapshot.forEach(doc => {
-      const userData = doc.data();
-      allUsers.push({
-        id: doc.id,
-        ...userData
-      });
-      
-      if (doc.id !== userId && userData.onboardingComplete) {
-        users.push({
-          id: doc.id,
-          ...userData
-        });
-      } else if (doc.id === userId) {
-        console.log('Skipping current user:', doc.id);
-        console.log('Current user data:', userData);
-      } else if (!userData.onboardingComplete) {
-        console.log('Skipping incomplete profile:', doc.id);
+      const userData = doc.data()
+      if (doc.id === userId) {
+        currentUserData = userData
+      }
+      if (userData.onboardingComplete) {
+        allUsers.push({ id: doc.id, ...userData })
       }
     });
 
-    console.log(`Found ${users.length} potential matches out of ${allUsers.length} total users`);
-    return { success: true, users };
+    if (!currentUserData) {
+      console.error("Current user data not found or incomplete.")
+      return { success: false, error: "User not found" }
+    }
+
+    // calculate score
+    const scoredUsers = allUsers
+      .filter(user => user.id !== userId)
+      .map(user => {
+        let score = 0
+
+        // interests and classes contribute one point
+        const sharedInterests = user.interests?.filter(i => currentUserData.interests?.includes(i)) || []
+        score += sharedInterests.length
+
+        const sharedClasses = user.classes?.filter(c => currentUserData.classes?.includes(c)) || []
+        score += sharedClasses.length
+
+        // other features contribute half point
+        const sharedHelp = user.helpType?.filter(h => currentUserData.helpType?.includes(h)) || []
+        score += 0.5 * sharedHelp.length
+
+        if (user.connectionType && user.connectionType === currentUserData.connectionType) {
+          score += 0.5
+        }
+
+        const sharedWorkStyle = user.workStyle?.filter(w => currentUserData.workStyle?.includes(w)) || []
+        score += 0.5 * sharedWorkStyle.length
+
+        return { ...user, score }
+      })
+
+    // sort
+    scoredUsers.sort((a, b) => b.score - a.score)
+
+    console.log(`Matched ${scoredUsers.length} users, sorted by similarity`)
+    return { success: true, matches: scoredUsers }
+
   } catch (error) {
-    console.error('Error getting potential matches:', error);
-    return { success: false, error: error.message };
+    console.error('Error getting potential matches:', error)
+    return { success: false, error: error.message }
   }
-};
+}
+
 
 /**
  * Records a user's swipe action (like/dislike)
