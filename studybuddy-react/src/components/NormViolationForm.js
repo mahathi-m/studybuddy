@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { db, auth } from "../firebase"
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"
+import { useNavigate } from "react-router-dom";
 
 const VIOLATION_TYPES = ["No-show", "Flaky behavior", "Disrespect", "Harassment", "Spam", "Other"]
 const ACTIONS = ["Just documenting", "Warning", "Suspension", "Other"]
@@ -11,6 +12,9 @@ export default function NormViolationForm() {
   const [description, setDescription] = useState("")
   const [evidence, setEvidence] = useState("")
   const [action, setAction] = useState("")
+
+  const navigate = useNavigate();
+
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -43,9 +47,21 @@ export default function NormViolationForm() {
   }
 
   return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#9DDED3] to-white p-6">
+    <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-xl">
+      {/* back button + form go here */}
+
+    <div className="flex flex-col space-y-4 bg-white p-6 rounded-xl shadow-md w-full">
+    <button
+      onClick={() => navigate("/home")}
+      className="text-blue-500 hover:underline self-start"
+    >
+      ← Back to Profile
+    </button>
+
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col space-y-4 bg-white p-6 rounded-xl shadow-md w-full"
+      className="flex flex-col space-y-4 w-full"
     >
       <h2 className="text-2xl font-semibold text-center mb-4">Norm Violation Report</h2>
 
@@ -118,5 +134,8 @@ export default function NormViolationForm() {
         Submit Report
       </button>
     </form>
+    </div>
+    </div>
+    </div>
   )
 }
